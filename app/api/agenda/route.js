@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getDb, initDB } from "@/lib/db";
+import { db, initDB } from "@/lib/db";
 
-const dbCache = { local: false, prod: false };
+let dbReady = false;
 
-async function ensureDB(useProduction) {
-  if (!dbCache[useProduction ? "prod" : "local"]) { 
-    await initDB(useProduction); 
-    dbCache[useProduction ? "prod" : "local"] = true; 
+async function ensureDB() {
+  if (!dbReady) { 
+    await initDB(); 
+    dbReady = true; 
   }
 }
 
@@ -20,23 +20,21 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const day    = searchParams.get("day");
     const option = searchParams.get("option");
-    const isProd = !!process.env.VERCEL;
 
     if (!day || !option) {
       return NextResponse.json({ error: "Faltan parámetros: day, option" }, { status: 400 });
     }
 
-    await ensureDB(isProd);
-    const client = getDb(isProd);
+    await ensureDB();
 
     let result;
     try {
-      result = await client.execute({
+      result = await db.execute({
         sql:  "SELECT blocks, start_time, updated_at FROM schedules WHERE day = ? AND option = ?",
         args: [day, parseInt(option)],
       });
     } catch (e) {
-      result = await client.execute({
+      result = await db.execute({
         sql:  "SELECT blocks, updated_at FROM schedules WHERE day = ? AND option = ?",
         args: [day, parseInt(option)],
       });
@@ -69,10 +67,7 @@ export async function GET(req) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function POST(req) {
   try {
-    const isProd = !!process.env.VERCEL;
-
-    await ensureDB(isProd);
-    const client = getDb(isProd);
+    await ensureDB();
     
     const body = await req.json();
     const { day, option, blocks, startTime } = body;
@@ -84,7 +79,7 @@ export async function POST(req) {
     const st = startTime || "04:30";
 
     try {
-      await client.execute({
+      await db.execute({
         sql: `
           INSERT INTO schedules (day, option, blocks, start_time, updated_at)
           VALUES (?, ?, ?, ?, datetime('now'))
@@ -96,7 +91,7 @@ export async function POST(req) {
         args: [day, parseInt(option), JSON.stringify(blocks), st],
       });
     } catch (e) {
-      await client.execute({
+      await db.execute({
         sql: `
           INSERT INTO schedules (day, option, blocks, updated_at)
           VALUES (?, ?, ?, datetime('now'))

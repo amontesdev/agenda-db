@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getDb, initDB } from "@/lib/db";
+import { db, initDB } from "@/lib/db";
 
-const dbCache = { local: false, prod: false };
+let dbReady = false;
 
-async function ensureDB(useProduction) {
-  if (!dbCache[useProduction ? "prod" : "local"]) { 
-    await initDB(useProduction); 
-    dbCache[useProduction ? "prod" : "local"] = true; 
+async function ensureDB() {
+  if (!dbReady) { 
+    await initDB(); 
+    dbReady = true; 
   }
 }
 
@@ -16,12 +16,9 @@ async function ensureDB(useProduction) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function GET(req) {
   try {
-    const isProd = !!process.env.VERCEL;
+    await ensureDB();
     
-    await ensureDB(isProd);
-    const client = getDb(isProd);
-    
-    const result = await client.execute({
+    const result = await db.execute({
       sql: "SELECT * FROM custom_tasks ORDER BY created_at DESC",
     });
 
@@ -40,20 +37,14 @@ export async function GET(req) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function POST(req) {
   try {
-    const isProd = !!process.env.VERCEL;
-    
-    await ensureDB(isProd);
-    const client = getDb(isProd);
+    await ensureDB();
     
     let body;
     try {
       body = await req.json();
     } catch (e) {
-      console.error("[POST /api/tasks] JSON parse error:", e);
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
-    
-    console.log("[POST /api/tasks] body:", body);
     
     const { name, emoji, color, bg, border, mins } = body || {};
 
@@ -61,8 +52,7 @@ export async function POST(req) {
       return NextResponse.json({ error: "Se requiere name" }, { status: 400 });
     }
 
-    console.log("[POST /api/tasks] inserting...");
-    const result = await client.execute({
+    const result = await db.execute({
       sql: `
         INSERT INTO custom_tasks (name, emoji, color, bg, border, mins)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -77,10 +67,7 @@ export async function POST(req) {
       ],
     });
 
-    console.log("[POST /api/tasks] Insert result:", result);
-
-    const lastRow = await client.execute("SELECT last_insert_rowid() as id");
-    console.log("[POST /api/tasks] Last row:", lastRow);
+    const lastRow = await db.execute("SELECT last_insert_rowid() as id");
     const insertId = lastRow?.rows?.[0]?.id || Date.now();
 
     return NextResponse.json({ ok: true, id: insertId });
@@ -97,17 +84,16 @@ export async function POST(req) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function DELETE(req) {
   try {
-    const isProd = !!process.env.VERCEL;
+    const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
-    await ensureDB(isProd);
-    const client = getDb(isProd);
+    await ensureDB();
 
     if (!id) {
       return NextResponse.json({ error: "Se requiere id" }, { status: 400 });
     }
 
-    await client.execute({
+    await db.execute({
       sql: "DELETE FROM custom_tasks WHERE id = ?",
       args: [parseInt(id)],
     });
