@@ -95,6 +95,16 @@ async function apiCreateTask(task, useProduction = false) {
   return data || { ok: false };
 }
 
+async function apiDeleteTask(id, useProduction = false) {
+  const prodParam = useProduction ? "&prod=true" : "";
+  const res = await fetch(`/api/tasks?id=${id}${prodParam}`, {
+    method:  "DELETE",
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || "Error al eliminar tarea");
+  return data || { ok: true };
+}
+
 /* ─── Componente principal ─────────────────────────────────────────────── */
 export default function AgendaApp() {
   const [day,      setDay]      = useState("semana");
@@ -103,6 +113,7 @@ export default function AgendaApp() {
   const [blocks,   setBlocks]   = useState(() => seed(PRESETS.semana[1]));
   const [customTasks, setCustomTasks] = useState({});
   const [showModal, setShowModal] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
   const [newTask, setNewTask] = useState({ name: "", emoji: "📌", color: "#94a3b8", bg: "#0a1020", border: "#334155", mins: 30 });
   const [editId,   setEditId]   = useState(null);
   const [editVal,  setEditVal]  = useState("");
@@ -401,18 +412,30 @@ export default function AgendaApp() {
 
           {/* Agregar */}
           <div style={{ fontSize:"9px", color:"#cbd5e1", letterSpacing:"2.5px", marginBottom:"11px" }}>+ AGREGAR</div>
-          {Object.entries({...ACTIVITIES, ...customTasks}).map(([key, act]) => (
-            <button key={key} onClick={()=>addBlk(key)} style={{
-              display:"flex", alignItems:"center", gap:"7px", width:"100%",
-              padding:"7px 9px", marginBottom:"4px",
-              background:act.bg, border:`1px solid ${act.border}`,
-              borderRadius:"7px", cursor:"pointer", color:act.color,
-              fontSize:"10px", fontFamily:"inherit", fontWeight:"600",
-              textAlign:"left", transition:"all 0.12s", lineHeight:"1.4" }}>
-              <span style={{ flexShrink:0 }}>{act.emoji}</span>
-              <span>{act.label}</span>
-            </button>
-          ))}
+          {Object.entries({...ACTIVITIES, ...customTasks}).map(([key, act]) => {
+            const isCustom = key.startsWith("custom_");
+            const taskId = isCustom ? key.replace("custom_", "") : null;
+            return (
+              <div key={key} style={{ display:"flex", alignItems:"center", marginBottom:"4px" }}>
+                <button onClick={()=>addBlk(key)} style={{
+                  display:"flex", alignItems:"center", gap:"7px", flex:1,
+                  padding:"7px 9px",
+                  background:act.bg, border:`1px solid ${act.border}`,
+                  borderRadius:"7px", cursor:"pointer", color:act.color,
+                  fontSize:"10px", fontFamily:"inherit", fontWeight:"600",
+                  textAlign:"left", transition:"all 0.12s", lineHeight:"1.4" }}>
+                  <span style={{ flexShrink:0 }}>{act.emoji}</span>
+                  <span>{act.label}</span>
+                </button>
+                {isCustom && (
+                  <div style={{ display:"flex", gap:"2px", marginLeft:"4px" }}>
+                    <button onClick={(e) => { e.stopPropagation(); setEditingTask({ id: taskId, ...act }); setNewTask({ name: act.label, emoji: act.emoji, color: act.color, mins: act.mins }); setShowModal(true); }} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#64748b", fontSize:"9px", cursor:"pointer" }}>✎</button>
+                    <button onClick={async (e) => { e.stopPropagation(); if(confirm("Eliminar tarea?")) { try { await apiDeleteTask(taskId, useProd); const newTasks = {...customTasks}; delete newTasks[key]; setCustomTasks(newTasks); } catch(e) { alert(e.message); } }}} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#f87171", fontSize:"9px", cursor:"pointer" }}>✕</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
           <button onClick={()=>setShowModal(true)} style={{
             display:"flex", alignItems:"center", gap:"7px", width:"100%",
             padding:"7px 9px", marginTop:"8px", marginBottom:"4px",
@@ -469,7 +492,7 @@ export default function AgendaApp() {
           onClick={()=>setShowModal(false)}>
           <div style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:"12px", padding:"24px", width:"300px", maxWidth:"90vw" }}
             onClick={e=>e.stopPropagation()}>
-            <div style={{ fontSize:"14px", fontWeight:"700", color:"#f1f5f9", marginBottom:"16px" }}>Nueva Tarea</div>
+            <div style={{ fontSize:"14px", fontWeight:"700", color:"#f1f5f9", marginBottom:"16px" }}>{editingTask ? "Editar Tarea" : "Nueva Tarea"}</div>
             
             <div style={{ marginBottom:"12px" }}>
               <div style={{ fontSize:"10px", color:"#94a3b8", marginBottom:"4px" }}>Nombre</div>
@@ -497,7 +520,7 @@ export default function AgendaApp() {
             </div>
 
             <div style={{ display:"flex", gap:"8px" }}>
-              <button onClick={()=>setShowModal(false)} style={{ flex:1, padding:"10px", background:"transparent", border:"1px solid #334155", borderRadius:"6px", color:"#94a3b8", fontSize:"12px", fontFamily:"inherit", cursor:"pointer" }}>
+              <button onClick={()=>{setShowModal(false); setEditingTask(null); setNewTask({ name: "", emoji: "📌", color: "#94a3b8", bg: "#0a1020", border: "#334155", mins: 30 });}} style={{ flex:1, padding:"10px", background:"transparent", border:"1px solid #334155", borderRadius:"6px", color:"#94a3b8", fontSize:"12px", fontFamily:"inherit", cursor:"pointer" }}>
                 Cancelar
               </button>
               <button onClick={async () => {
@@ -505,6 +528,12 @@ export default function AgendaApp() {
                 try {
                   const bg = newTask.color + "22";
                   const border = newTask.color;
+                  
+                  if (editingTask) {
+                    // Edit mode - delete old and create new
+                    await apiDeleteTask(editingTask.id, useProd);
+                  }
+                  
                   const res = await apiCreateTask({ 
                     name: newTask.name,
                     emoji: newTask.emoji,
@@ -517,14 +546,15 @@ export default function AgendaApp() {
                     const id = res.id || Date.now();
                     setCustomTasks({ ...customTasks, [`custom_${id}`]: { emoji: newTask.emoji, label: newTask.name, color: newTask.color, bg, border: newTask.color, mins: newTask.mins } });
                     setShowModal(false);
+                    setEditingTask(null);
                     setNewTask({ name: "", emoji: "📌", color: "#94a3b8", bg: "#0a1020", border: "#334155", mins: 30 });
                   }
                 } catch (e) { 
                   console.error(e);
-                  alert("Error al crear tarea: " + e.message);
+                  alert("Error: " + e.message);
                 }
               }} style={{ flex:1, padding:"10px", background:"#047857", border:"none", borderRadius:"6px", color:"white", fontSize:"12px", fontFamily:"inherit", cursor:"pointer" }}>
-                Crear
+                {editingTask ? "Actualizar" : "Crear"}
               </button>
             </div>
           </div>
