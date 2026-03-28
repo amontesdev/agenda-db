@@ -40,7 +40,7 @@ export async function POST(req) {
       return NextResponse.json({ error: "Se requiere name" }, { status: 400 });
     }
 
-    await db.execute({
+    const result = await db.execute({
       sql: `
         INSERT INTO custom_tasks (name, emoji, color, bg, border, mins)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -55,7 +55,10 @@ export async function POST(req) {
       ],
     });
 
+    console.log("[POST /api/tasks] Insert result:", result);
+
     const lastRow = await db.execute({ sql: "SELECT last_insert_rowid() as id" });
+    console.log("[POST /api/tasks] Last row:", lastRow);
     const insertId = lastRow.rows[0].id;
 
     return NextResponse.json({ ok: true, id: insertId });

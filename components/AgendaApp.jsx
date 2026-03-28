@@ -86,8 +86,9 @@ async function apiCreateTask(task) {
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify(task),
   });
-  if (!res.ok) throw new Error("Error al crear tarea");
-  return res.json();
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Error al crear tarea");
+  return data;
 }
 
 /* ─── Componente principal ─────────────────────────────────────────────── */
@@ -491,6 +492,10 @@ export default function AgendaApp() {
                 try {
                   const bg = newTask.color + "22";
                   const res = await apiCreateTask({ ...newTask, bg });
+                  if (!res.ok) {
+                    alert("Error: " + (res.error || "Unknown error"));
+                    return;
+                  }
                   const id = res.id || Date.now();
                   setCustomTasks({ ...customTasks, [`custom_${id}`]: { emoji: newTask.emoji, label: newTask.name, color: newTask.color, bg, border: newTask.color, mins: newTask.mins } });
                   setShowModal(false);
