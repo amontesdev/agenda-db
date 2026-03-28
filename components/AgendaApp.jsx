@@ -305,7 +305,7 @@ export default function AgendaApp() {
                                 fontSize:"11px", fontFamily:"inherit", outline:"none" }}
                               autoFocus />
                             <span style={{ fontSize:"9px", color:"#64748b" }}>min</span>
-                            <button onClick={saveEdit} style={{ background:"#047857", border:"none",
+                            <button type="button" onClick={saveEdit} style={{ background:"#047857", border:"none",
                               color:"white", borderRadius:"4px", padding:"3px 9px",
                               cursor:"pointer", fontSize:"11px", fontFamily:"inherit" }}>✓</button>
                             <button onClick={()=>setEditId(null)} style={{ background:"transparent",
