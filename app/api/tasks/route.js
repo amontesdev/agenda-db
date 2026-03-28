@@ -22,7 +22,15 @@ export async function GET(req) {
       sql: "SELECT * FROM custom_tasks ORDER BY created_at DESC",
     });
 
-    return NextResponse.json({ tasks: result.rows || [] });
+    const tasks = (result?.rows ?? []).map(row => {
+      const plain = {};
+      for (const [key, value] of Object.entries(row ?? {})) {
+        plain[key] = typeof value === "bigint" ? Number(value) : value;
+      }
+      return plain;
+    });
+
+    return NextResponse.json({ tasks });
 
   } catch (err) {
     console.error("[GET /api/tasks]", err);
@@ -68,7 +76,10 @@ export async function POST(req) {
     });
 
     const lastRow = await db.execute("SELECT last_insert_rowid() as id");
-    const insertId = lastRow?.rows?.[0]?.id || Date.now();
+    const rawId = lastRow?.rows?.[0]?.id;
+    const insertId = rawId !== undefined && rawId !== null
+      ? (typeof rawId === "bigint" ? Number(rawId) : rawId)
+      : Date.now();
 
     return NextResponse.json({ ok: true, id: insertId });
 
@@ -89,13 +100,15 @@ export async function DELETE(req) {
 
     await ensureDB();
 
-    if (!id) {
+    const numericId = Number(id);
+
+    if (!id || !Number.isFinite(numericId)) {
       return NextResponse.json({ error: "Se requiere id" }, { status: 400 });
     }
 
     await db.execute({
       sql: "DELETE FROM custom_tasks WHERE id = ?",
-      args: [parseInt(id)],
+      args: [numericId],
     });
 
     return NextResponse.json({ ok: true });
@@ -117,7 +130,9 @@ export async function PUT(req) {
 
     await ensureDB();
 
-    if (!id) {
+    const numericId = Number(id);
+
+    if (!id || !Number.isFinite(numericId)) {
       return NextResponse.json({ error: "Se requiere id" }, { status: 400 });
     }
 
@@ -152,7 +167,7 @@ export async function PUT(req) {
         bg || `${color || "#94a3b8"}22`,
         border || color || "#334155",
         Number.isFinite(Number(mins)) ? Number(mins) : 30,
-        parseInt(id),
+        numericId,
       ],
     });
 
