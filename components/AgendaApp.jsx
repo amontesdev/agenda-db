@@ -129,10 +129,10 @@ export default function AgendaApp() {
   const [savedAt,  setSavedAt]  = useState(null);
   const [loaded,   setLoaded]   = useState(false);
   const [sqlLog,   setSqlLog]   = useState([]);
-  const [useProd,  setUseProd]  = useState(process.env.NODE_ENV === "production");
 
-  const pushLog = (msg, type = "info") =>
+  const pushLog = useCallback((msg, type = "info") => {
     setSqlLog(l => [...l.slice(-11), { msg, type, ts: new Date().toLocaleTimeString("es-CO") }]);
+  }, []);
 
   /* ── Cargar día/opción desde SQLite ── */
   const loadFromDB = useCallback(async (d, p) => {
@@ -156,7 +156,7 @@ export default function AgendaApp() {
       pushLog(`✗ ${e.message}`, "error");
       setDbStatus("error");
     }
-  }, [useProd]);
+  }, [pushLog]);
 
   /* ── Guardar en SQLite (debounce 700ms) ── */
   useEffect(() => {
@@ -181,15 +181,39 @@ export default function AgendaApp() {
 
   /* ── Mount: cargar estado actual ── */
   useEffect(() => {
-    Promise.all([
-      loadFromDB("semana", 1),
-      apiLoadTasks().then(data => {
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      try {
+        const taskData = await apiLoadTasks();
+        if (cancelled) return;
+
         const tasks = {};
-        data.tasks.forEach(t => { tasks[`custom_${t.id}`] = { emoji: t.emoji, label: t.name, color: t.color, bg: t.bg, border: t.border, mins: t.mins }; });
+        (taskData?.tasks || []).forEach(t => {
+          const id = typeof t.id === "bigint" ? Number(t.id) : t.id;
+          tasks[`custom_${id}`] = {
+            emoji: t.emoji ?? "📌",
+            label: t.name ?? `custom_${id}`,
+            color: t.color ?? "#94a3b8",
+            bg:    t.bg    ?? `${t.color ?? "#94a3b8"}22`,
+            border:t.border?? (t.color ?? "#334155"),
+            mins:  Number.isFinite(Number(t.mins)) ? Number(t.mins) : 30,
+          };
+        });
         setCustomTasks(tasks);
-      }).catch(() => {})
-    ]).finally(() => setLoaded(true));
-  }, [useProd]);
+      } catch (err) {
+        pushLog(`✗ ${err?.message ?? "Error al cargar tareas"}`, "error");
+      }
+
+      await loadFromDB("semana", 1);
+    };
+
+    bootstrap().finally(() => {
+      if (!cancelled) setLoaded(true);
+    });
+
+    return () => { cancelled = true; };
+  }, [loadFromDB, pushLog]);
 
   /* ── Cambiar día/opción ── */
   const switchTo = (d, p) => {
@@ -273,14 +297,6 @@ export default function AgendaApp() {
                 <span style={{ fontSize:"9px", color:"#cbd5e1", marginLeft:"4px" }}>· {savedAt}</span>
               )}
             </div>
-            {process.env.NODE_ENV === "development" && (
-              <button onClick={() => { setUseProd(!useProd); setLoaded(false); loadFromDB(day, opt); }}
-                style={{ background:useProd ? "#047857" : "transparent", border:"1px solid #334155",
-                  borderRadius:"4px", padding:"2px 8px", color:useProd ? "#6ee7b7" : "#64748b",
-                  fontSize:"8px", fontFamily:"inherit", cursor:"pointer", marginTop:"4px" }}>
-                {useProd ? "🌐 PROD" : "💻 LOCAL"}
-              </button>
-            )}
             <div style={{ fontSize:"10px", color:"#cbd5e1" }}>
               Total: <b style={{ color:"#f8fafc" }}>{fmtMins(totalMins)}</b>
               <span style={{ color:"#334155" }}> · </span>
