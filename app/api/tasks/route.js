@@ -17,9 +17,10 @@ async function ensureDB() {
 export async function GET(req) {
   try {
     await ensureDB();
-    
+
     const result = await db.execute({
       sql: "SELECT * FROM custom_tasks ORDER BY created_at DESC",
+      args: [],
     });
 
     const tasks = (result?.rows ?? []).map(row => {
