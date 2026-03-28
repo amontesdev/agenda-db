@@ -56,16 +56,18 @@ const fmtMins = (m) => {
 };
 
 /* ─── API helpers ──────────────────────────────────────────────────────── */
-async function apiLoad(day, option) {
-  const res = await fetch(`/api/agenda?day=${day}&option=${option}`);
+async function apiLoad(day, option, useProduction = false) {
+  const prodParam = useProduction ? "&prod=true" : "";
+  const res = await fetch(`/api/agenda?day=${day}&option=${option}${prodParam}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("Error al cargar desde SQLite");
   return res.json();
 }
 
-async function apiSave(day, option, blocks, startTime) {
+async function apiSave(day, option, blocks, startTime, useProduction = false) {
+  const prodParam = useProduction ? "?prod=true" : "";
   const plain = blocks.map(({ id, ...rest }) => rest);
-  const res = await fetch("/api/agenda", {
+  const res = await fetch(`/api/agenda${prodParam}`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({ day, option, blocks: plain, startTime }),
@@ -74,14 +76,16 @@ async function apiSave(day, option, blocks, startTime) {
   return res.json();
 }
 
-async function apiLoadTasks() {
-  const res = await fetch("/api/tasks");
+async function apiLoadTasks(useProduction = false) {
+  const prodParam = useProduction ? "?prod=true" : "";
+  const res = await fetch(`/api/tasks${prodParam}`);
   if (!res.ok) throw new Error("Error al cargar tareas");
   return res.json();
 }
 
-async function apiCreateTask(task) {
-  const res = await fetch("/api/tasks", {
+async function apiCreateTask(task, useProduction = false) {
+  const prodParam = useProduction ? "?prod=true" : "";
+  const res = await fetch(`/api/tasks${prodParam}`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify(task),
@@ -108,6 +112,7 @@ export default function AgendaApp() {
   const [savedAt,  setSavedAt]  = useState(null);
   const [loaded,   setLoaded]   = useState(false);
   const [sqlLog,   setSqlLog]   = useState([]);
+  const [useProd,  setUseProd]  = useState(false);
 
   const pushLog = (msg, type = "info") =>
     setSqlLog(l => [...l.slice(-11), { msg, type, ts: new Date().toLocaleTimeString("es-CO") }]);
@@ -117,7 +122,7 @@ export default function AgendaApp() {
     setDbStatus("loading");
     pushLog(`SELECT * FROM schedules WHERE day='${d}' AND option=${p}`, "query");
     try {
-      const data = await apiLoad(d, p);
+      const data = await apiLoad(d, p, useProd);
       if (data?.found) {
         setBlocks(seed(data.blocks));
         setStartTime(data.startTime || DAY_STARTS[d]);
@@ -134,7 +139,7 @@ export default function AgendaApp() {
       pushLog(`✗ ${e.message}`, "error");
       setDbStatus("error");
     }
-  }, []);
+  }, [useProd]);
 
   /* ── Guardar en SQLite (debounce 700ms) ── */
   useEffect(() => {
@@ -144,7 +149,7 @@ export default function AgendaApp() {
       const plain = blocks.map(({ id, ...rest }) => rest);
       pushLog(`INSERT OR REPLACE INTO schedules (day='${day}', option=${opt}, blocks[${plain.length}])`, "query");
       try {
-        await apiSave(day, opt, blocks, startTime);
+        await apiSave(day, opt, blocks, startTime, useProd);
         const ts = new Date().toLocaleTimeString("es-CO", {hour:"2-digit",minute:"2-digit"});
         setSavedAt(ts);
         setDbStatus("ok");
@@ -161,13 +166,13 @@ export default function AgendaApp() {
   useEffect(() => {
     Promise.all([
       loadFromDB("semana", 1),
-      apiLoadTasks().then(data => {
+      apiLoadTasks(useProd).then(data => {
         const tasks = {};
         data.tasks.forEach(t => { tasks[`custom_${t.id}`] = { emoji: t.emoji, label: t.name, color: t.color, bg: t.bg, border: t.border, mins: t.mins }; });
         setCustomTasks(tasks);
       }).catch(() => {})
     ]).finally(() => setLoaded(true));
-  }, []);
+  }, [useProd]);
 
   /* ── Cambiar día/opción ── */
   const switchTo = (d, p) => {
@@ -239,7 +244,7 @@ export default function AgendaApp() {
               SQLITE · TURSO · NEXT.JS · VERCEL
             </div>
           </div>
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:"5px" }}>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:"5px" }}>
             <div style={{ display:"flex", alignItems:"center", gap:"6px",
               background:"#0a1525", border:"1px solid #334155", borderRadius:"20px", padding:"4px 12px" }}>
               <span style={{ width:"7px", height:"7px", borderRadius:"50%", background:sc.dot, flexShrink:0,
@@ -251,6 +256,14 @@ export default function AgendaApp() {
                 <span style={{ fontSize:"9px", color:"#cbd5e1", marginLeft:"4px" }}>· {savedAt}</span>
               )}
             </div>
+            {process.env.NODE_ENV === "development" && (
+              <button onClick={() => { setUseProd(!useProd); setLoaded(false); loadFromDB(day, opt); }}
+                style={{ background:useProd ? "#047857" : "transparent", border:"1px solid #334155",
+                  borderRadius:"4px", padding:"2px 8px", color:useProd ? "#6ee7b7" : "#64748b",
+                  fontSize:"8px", fontFamily:"inherit", cursor:"pointer", marginTop:"4px" }}>
+                {useProd ? "🌐 PROD" : "💻 LOCAL"}
+              </button>
+            )}
             <div style={{ fontSize:"10px", color:"#cbd5e1" }}>
               Total: <b style={{ color:"#f8fafc" }}>{fmtMins(totalMins)}</b>
               <span style={{ color:"#334155" }}> · </span>
@@ -491,7 +504,7 @@ export default function AgendaApp() {
                 if (!newTask.name.trim()) return;
                 try {
                   const bg = newTask.color + "22";
-                  const res = await apiCreateTask({ ...newTask, bg });
+                  const res = await apiCreateTask({ ...newTask, bg }, useProd);
                   if (res && res.ok) {
                     const id = res.id || Date.now();
                     setCustomTasks({ ...customTasks, [`custom_${id}`]: { emoji: newTask.emoji, label: newTask.name, color: newTask.color, bg, border: newTask.color, mins: newTask.mins } });

@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
-import { db, initDB } from "@/lib/db";
+import { getDb, initDB } from "@/lib/db";
 
-let dbReady = false;
-async function ensureDB() {
-  if (!dbReady) { await initDB(); dbReady = true; }
+const dbCache = { local: false, prod: false };
+
+async function ensureDB(useProduction) {
+  if (!dbCache[useProduction ? "prod" : "local"]) { 
+    await initDB(useProduction); 
+    dbCache[useProduction ? "prod" : "local"] = true; 
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -12,8 +16,13 @@ async function ensureDB() {
 ──────────────────────────────────────────────────────────────────────── */
 export async function GET(req) {
   try {
-    await ensureDB();
-    const result = await db.execute({
+    const { searchParams } = new URL(req.url);
+    const prod = searchParams.get("prod") === "true";
+    
+    await ensureDB(prod);
+    const client = getDb(prod);
+    
+    const result = await client.execute({
       sql: "SELECT * FROM custom_tasks ORDER BY created_at DESC",
     });
 
@@ -32,15 +41,34 @@ export async function GET(req) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function POST(req) {
   try {
-    await ensureDB();
-    const body = await req.json();
-    const { name, emoji, color, bg, border, mins } = body;
+    const { searchParams } = new URL(req.url);
+    const prod = searchParams.get("prod") === "true";
+    
+    console.log("[POST /api/tasks] prod:", prod);
+    
+    await ensureDB(prod);
+    const client = getDb(prod);
+    
+    console.log("[POST /api/tasks] client:", client);
+    
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      console.error("[POST /api/tasks] JSON parse error:", e);
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    
+    console.log("[POST /api/tasks] body:", body);
+    
+    const { name, emoji, color, bg, border, mins } = body || {};
 
     if (!name) {
       return NextResponse.json({ error: "Se requiere name" }, { status: 400 });
     }
 
-    const result = await db.execute({
+    console.log("[POST /api/tasks] inserting...");
+    const result = await client.execute({
       sql: `
         INSERT INTO custom_tasks (name, emoji, color, bg, border, mins)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -57,7 +85,7 @@ export async function POST(req) {
 
     console.log("[POST /api/tasks] Insert result:", result);
 
-    const lastRow = await db.execute({ sql: "SELECT last_insert_rowid() as id" });
+    const lastRow = await client.execute("SELECT last_insert_rowid() as id");
     console.log("[POST /api/tasks] Last row:", lastRow);
     const insertId = lastRow?.rows?.[0]?.id || Date.now();
 
@@ -75,15 +103,18 @@ export async function POST(req) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function DELETE(req) {
   try {
-    await ensureDB();
     const { searchParams } = new URL(req.url);
+    const prod = searchParams.get("prod") === "true";
     const id = searchParams.get("id");
+
+    await ensureDB(prod);
+    const client = getDb(prod);
 
     if (!id) {
       return NextResponse.json({ error: "Se requiere id" }, { status: 400 });
     }
 
-    await db.execute({
+    await client.execute({
       sql: "DELETE FROM custom_tasks WHERE id = ?",
       args: [parseInt(id)],
     });

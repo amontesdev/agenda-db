@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
-import { db, initDB } from "@/lib/db";
+import { getDb, initDB } from "@/lib/db";
 
-let dbReady = false;
-async function ensureDB() {
-  if (!dbReady) { await initDB(); dbReady = true; }
+const dbCache = { local: false, prod: false };
+
+async function ensureDB(useProduction) {
+  if (!dbCache[useProduction ? "prod" : "local"]) { 
+    await initDB(useProduction); 
+    dbCache[useProduction ? "prod" : "local"] = true; 
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -13,23 +17,26 @@ async function ensureDB() {
 ──────────────────────────────────────────────────────────────────────── */
 export async function GET(req) {
   try {
-    await ensureDB();
     const { searchParams } = new URL(req.url);
     const day    = searchParams.get("day");
     const option = searchParams.get("option");
+    const prod   = searchParams.get("prod") === "true";
 
     if (!day || !option) {
       return NextResponse.json({ error: "Faltan parámetros: day, option" }, { status: 400 });
     }
 
+    await ensureDB(prod);
+    const client = getDb(prod);
+
     let result;
     try {
-      result = await db.execute({
+      result = await client.execute({
         sql:  "SELECT blocks, start_time, updated_at FROM schedules WHERE day = ? AND option = ?",
         args: [day, parseInt(option)],
       });
     } catch (e) {
-      result = await db.execute({
+      result = await client.execute({
         sql:  "SELECT blocks, updated_at FROM schedules WHERE day = ? AND option = ?",
         args: [day, parseInt(option)],
       });
@@ -62,7 +69,12 @@ export async function GET(req) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function POST(req) {
   try {
-    await ensureDB();
+    const { searchParams } = new URL(req.url);
+    const prod = searchParams.get("prod") === "true";
+
+    await ensureDB(prod);
+    const client = getDb(prod);
+    
     const body = await req.json();
     const { day, option, blocks, startTime } = body;
 
@@ -73,7 +85,7 @@ export async function POST(req) {
     const st = startTime || "04:30";
 
     try {
-      await db.execute({
+      await client.execute({
         sql: `
           INSERT INTO schedules (day, option, blocks, start_time, updated_at)
           VALUES (?, ?, ?, ?, datetime('now'))
@@ -85,7 +97,7 @@ export async function POST(req) {
         args: [day, parseInt(option), JSON.stringify(blocks), st],
       });
     } catch (e) {
-      await db.execute({
+      await client.execute({
         sql: `
           INSERT INTO schedules (day, option, blocks, updated_at)
           VALUES (?, ?, ?, datetime('now'))
