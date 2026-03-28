@@ -56,18 +56,16 @@ const fmtMins = (m) => {
 };
 
 /* ─── API helpers ──────────────────────────────────────────────────────── */
-async function apiLoad(day, option, useProduction = false) {
-  const prodParam = useProduction ? "&prod=true" : "";
-  const res = await fetch(`/api/agenda?day=${day}&option=${option}${prodParam}`);
+async function apiLoad(day, option) {
+  const res = await fetch(`/api/agenda?day=${day}&option=${option}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("Error al cargar desde SQLite");
   return res.json();
 }
 
-async function apiSave(day, option, blocks, startTime, useProduction = false) {
-  const prodParam = useProduction ? "?prod=true" : "";
+async function apiSave(day, option, blocks, startTime) {
   const plain = blocks.map(({ id, ...rest }) => rest);
-  const res = await fetch(`/api/agenda${prodParam}`, {
+  const res = await fetch("/api/agenda", {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({ day, option, blocks: plain, startTime }),
@@ -76,16 +74,14 @@ async function apiSave(day, option, blocks, startTime, useProduction = false) {
   return res.json();
 }
 
-async function apiLoadTasks(useProduction = false) {
-  const prodParam = useProduction ? "?prod=true" : "";
-  const res = await fetch(`/api/tasks${prodParam}`);
+async function apiLoadTasks() {
+  const res = await fetch("/api/tasks");
   if (!res.ok) throw new Error("Error al cargar tareas");
   return res.json();
 }
 
-async function apiCreateTask(task, useProduction = false) {
-  const prodParam = useProduction ? "?prod=true" : "";
-  const res = await fetch(`/api/tasks${prodParam}`, {
+async function apiCreateTask(task) {
+  const res = await fetch("/api/tasks", {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify(task),
@@ -95,9 +91,8 @@ async function apiCreateTask(task, useProduction = false) {
   return data || { ok: false };
 }
 
-async function apiDeleteTask(id, useProduction = false) {
-  const prodParam = useProduction ? "&prod=true" : "";
-  const res = await fetch(`/api/tasks?id=${id}${prodParam}`, {
+async function apiDeleteTask(id) {
+  const res = await fetch(`/api/tasks?id=${id}`, {
     method:  "DELETE",
   });
   const data = await res.json().catch(() => ({}));
@@ -133,7 +128,7 @@ export default function AgendaApp() {
     setDbStatus("loading");
     pushLog(`SELECT * FROM schedules WHERE day='${d}' AND option=${p}`, "query");
     try {
-      const data = await apiLoad(d, p, useProd);
+      const data = await apiLoad(d, p);
       if (data?.found) {
         setBlocks(seed(data.blocks));
         setStartTime(data.startTime || DAY_STARTS[d]);
@@ -160,7 +155,7 @@ export default function AgendaApp() {
       const plain = blocks.map(({ id, ...rest }) => rest);
       pushLog(`INSERT OR REPLACE INTO schedules (day='${day}', option=${opt}, blocks[${plain.length}])`, "query");
       try {
-        await apiSave(day, opt, blocks, startTime, useProd);
+        await apiSave(day, opt, blocks, startTime);
         const ts = new Date().toLocaleTimeString("es-CO", {hour:"2-digit",minute:"2-digit"});
         setSavedAt(ts);
         setDbStatus("ok");
@@ -177,7 +172,7 @@ export default function AgendaApp() {
   useEffect(() => {
     Promise.all([
       loadFromDB("semana", 1),
-      apiLoadTasks(useProd).then(data => {
+      apiLoadTasks().then(data => {
         const tasks = {};
         data.tasks.forEach(t => { tasks[`custom_${t.id}`] = { emoji: t.emoji, label: t.name, color: t.color, bg: t.bg, border: t.border, mins: t.mins }; });
         setCustomTasks(tasks);
@@ -430,7 +425,7 @@ export default function AgendaApp() {
                 {isCustom && (
                   <div style={{ display:"flex", gap:"2px", marginLeft:"4px" }}>
                     <button onClick={(e) => { e.stopPropagation(); setEditingTask({ id: taskId, ...act }); setNewTask({ name: act.label, emoji: act.emoji, color: act.color, mins: act.mins }); setShowModal(true); }} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#64748b", fontSize:"9px", cursor:"pointer" }}>✎</button>
-                    <button onClick={async (e) => { e.stopPropagation(); if(confirm("Eliminar tarea?")) { try { await apiDeleteTask(taskId, useProd); const newTasks = {...customTasks}; delete newTasks[key]; setCustomTasks(newTasks); } catch(e) { alert(e.message); } }}} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#f87171", fontSize:"9px", cursor:"pointer" }}>✕</button>
+                    <button onClick={async (e) => { e.stopPropagation(); if(confirm("Eliminar tarea?")) { try { await apiDeleteTask(taskId); const newTasks = {...customTasks}; delete newTasks[key]; setCustomTasks(newTasks); } catch(e) { alert(e.message); } }}} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#f87171", fontSize:"9px", cursor:"pointer" }}>✕</button>
                   </div>
                 )}
               </div>
@@ -531,7 +526,7 @@ export default function AgendaApp() {
                   
                   if (editingTask) {
                     // Edit mode - delete old and create new
-                    await apiDeleteTask(editingTask.id, useProd);
+                    await apiDeleteTask(editingTask.id);
                   }
                   
                   const res = await apiCreateTask({ 

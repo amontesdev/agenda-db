@@ -20,18 +20,14 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const day    = searchParams.get("day");
     const option = searchParams.get("option");
-    const prodParam = searchParams.get("prod");
-    const isVercel = !!process.env.VERCEL;
-    const prod = prodParam === "true" || (prodParam === null && isVercel);
-
-    console.log("[GET /api/agenda] prod:", prod, "isVercel:", isVercel);
+    const isProd = process.env.NODE_ENV === "production";
 
     if (!day || !option) {
       return NextResponse.json({ error: "Faltan parámetros: day, option" }, { status: 400 });
     }
 
-    await ensureDB(prod);
-    const client = getDb(prod);
+    await ensureDB(isProd);
+    const client = getDb(isProd);
 
     let result;
     try {
@@ -73,13 +69,10 @@ export async function GET(req) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function POST(req) {
   try {
-    const { searchParams } = new URL(req.url);
-    const prodParam = searchParams.get("prod");
-    const isVercel = !!process.env.VERCEL;
-    const prod = prodParam === "true" || (prodParam === null && isVercel);
+    const isProd = process.env.NODE_ENV === "production";
 
-    await ensureDB(prod);
-    const client = getDb(prod);
+    await ensureDB(isProd);
+    const client = getDb(isProd);
     
     const body = await req.json();
     const { day, option, blocks, startTime } = body;

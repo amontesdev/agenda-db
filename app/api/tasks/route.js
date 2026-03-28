@@ -16,13 +16,10 @@ async function ensureDB(useProduction) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function GET(req) {
   try {
-    const { searchParams } = new URL(req.url);
-    const prodParam = searchParams.get("prod");
-    const isVercel = !!process.env.VERCEL;
-    const prod = prodParam === "true" || (prodParam === null && isVercel);
+    const isProd = process.env.NODE_ENV === "production";
     
-    await ensureDB(prod);
-    const client = getDb(prod);
+    await ensureDB(isProd);
+    const client = getDb(isProd);
     
     const result = await client.execute({
       sql: "SELECT * FROM custom_tasks ORDER BY created_at DESC",
@@ -43,17 +40,10 @@ export async function GET(req) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function POST(req) {
   try {
-    const { searchParams } = new URL(req.url);
-    const prodParam = searchParams.get("prod");
-    const isVercel = !!process.env.VERCEL;
-    const prod = prodParam === "true" || (prodParam === null && isVercel);
+    const isProd = process.env.NODE_ENV === "production";
     
-    console.log("[POST /api/tasks] prod:", prod);
-    
-    await ensureDB(prod);
-    const client = getDb(prod);
-    
-    console.log("[POST /api/tasks] client:", client);
+    await ensureDB(isProd);
+    const client = getDb(isProd);
     
     let body;
     try {
@@ -108,13 +98,11 @@ export async function POST(req) {
 export async function DELETE(req) {
   try {
     const { searchParams } = new URL(req.url);
-    const prodParam = searchParams.get("prod");
-    const isVercel = !!process.env.VERCEL;
-    const prod = prodParam === "true" || (prodParam === null && isVercel);
+    const isProd = process.env.NODE_ENV === "production";
     const id = searchParams.get("id");
 
-    await ensureDB(prod);
-    const client = getDb(prod);
+    await ensureDB(isProd);
+    const client = getDb(isProd);
 
     if (!id) {
       return NextResponse.json({ error: "Se requiere id" }, { status: 400 });
