@@ -491,10 +491,14 @@ export default function AgendaApp() {
                 try {
                   const bg = newTask.color + "22";
                   const res = await apiCreateTask({ ...newTask, bg });
-                  setCustomTasks({ ...customTasks, [`custom_${res.id}`]: { emoji: newTask.emoji, label: newTask.name, color: newTask.color, bg, border: newTask.color, mins: newTask.mins } });
+                  const id = res.id || Date.now();
+                  setCustomTasks({ ...customTasks, [`custom_${id}`]: { emoji: newTask.emoji, label: newTask.name, color: newTask.color, bg, border: newTask.color, mins: newTask.mins } });
                   setShowModal(false);
                   setNewTask({ name: "", emoji: "📌", color: "#94a3b8", bg: "#0a1020", border: "#334155", mins: 30 });
-                } catch (e) { console.error(e); }
+                } catch (e) { 
+                  console.error(e);
+                  alert("Error al crear tarea: " + e.message);
+                }
               }} style={{ flex:1, padding:"10px", background:"#047857", border:"none", borderRadius:"6px", color:"white", fontSize:"12px", fontFamily:"inherit", cursor:"pointer" }}>
                 Crear
               </button>
