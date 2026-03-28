@@ -105,3 +105,61 @@ export async function DELETE(req) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+   PUT /api/tasks?id=X
+   Actualiza una tarea personalizada existente.
+──────────────────────────────────────────────────────────────────────── */
+export async function PUT(req) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    await ensureDB();
+
+    if (!id) {
+      return NextResponse.json({ error: "Se requiere id" }, { status: 400 });
+    }
+
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    const { name, emoji, color, bg, border, mins } = body || {};
+
+    if (!name) {
+      return NextResponse.json({ error: "Se requiere name" }, { status: 400 });
+    }
+
+    await db.execute({
+      sql: `
+        UPDATE custom_tasks
+        SET name = ?,
+            emoji = ?,
+            color = ?,
+            bg    = ?,
+            border = ?,
+            mins  = ?
+        WHERE id = ?
+      `,
+      args: [
+        name,
+        emoji || "📌",
+        color || "#94a3b8",
+        bg || `${color || "#94a3b8"}22`,
+        border || color || "#334155",
+        Number.isFinite(Number(mins)) ? Number(mins) : 30,
+        parseInt(id),
+      ],
+    });
+
+    return NextResponse.json({ ok: true });
+
+  } catch (err) {
+    console.error("[PUT /api/tasks]", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

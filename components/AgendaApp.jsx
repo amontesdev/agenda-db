@@ -91,6 +91,17 @@ async function apiCreateTask(task) {
   return data || { ok: false };
 }
 
+async function apiUpdateTask(id, task) {
+  const res = await fetch(`/api/tasks?id=${id}`, {
+    method:  "PUT",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(task),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || "Error al actualizar tarea");
+  return data || { ok: true };
+}
+
 async function apiDeleteTask(id) {
   const res = await fetch(`/api/tasks?id=${id}`, {
     method:  "DELETE",
@@ -109,7 +120,7 @@ export default function AgendaApp() {
   const [customTasks, setCustomTasks] = useState({});
   const [showModal, setShowModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [newTask, setNewTask] = useState({ name: "", emoji: "📌", color: "#94a3b8", bg: "#0a1020", border: "#334155", mins: 30 });
+  const [newTask, setNewTask] = useState({ name: "", emoji: "📌", color: "#94a3b8", bg: "#94a3b822", border: "#334155", mins: 30 });
   const [editId,   setEditId]   = useState(null);
   const [editVal,  setEditVal]  = useState("");
   const [dragIdx,  setDragIdx]  = useState(null);
@@ -424,7 +435,7 @@ export default function AgendaApp() {
                 </button>
                 {isCustom && (
                   <div style={{ display:"flex", gap:"2px", marginLeft:"4px" }}>
-                    <button onClick={(e) => { e.stopPropagation(); setEditingTask({ id: taskId, ...act }); setNewTask({ name: act.label, emoji: act.emoji, color: act.color, mins: act.mins }); setShowModal(true); }} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#64748b", fontSize:"9px", cursor:"pointer" }}>✎</button>
+                    <button onClick={(e) => { e.stopPropagation(); const numericId = Number(taskId); setEditingTask({ id: numericId, ...act }); setNewTask({ name: act.label, emoji: act.emoji, color: act.color, bg: act.bg || `${act.color}22`, border: act.border || act.color, mins: typeof act.mins === "number" ? act.mins : parseInt(act.mins) || 30 }); setShowModal(true); }} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#64748b", fontSize:"9px", cursor:"pointer" }}>✎</button>
                     <button onClick={async (e) => { e.stopPropagation(); if(confirm("Eliminar tarea?")) { try { await apiDeleteTask(taskId); const newTasks = {...customTasks}; delete newTasks[key]; setCustomTasks(newTasks); } catch(e) { alert(e.message); } }}} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#f87171", fontSize:"9px", cursor:"pointer" }}>✕</button>
                   </div>
                 )}
@@ -504,7 +515,7 @@ export default function AgendaApp() {
             <div style={{ display:"flex", gap:"12px", marginBottom:"16px" }}>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:"10px", color:"#94a3b8", marginBottom:"4px" }}>Color</div>
-                <input type="color" value={newTask.color} onChange={e=>setNewTask({...newTask, color:e.target.value, border:e.target.value})}
+                <input type="color" value={newTask.color} onChange={e=>setNewTask({...newTask, color:e.target.value, border:e.target.value, bg:`${e.target.value}22`})}
                   style={{ width:"100%", height:"36px", background:"#1e293b", border:"1px solid #334155", borderRadius:"6px", cursor:"pointer" }} />
               </div>
               <div style={{ flex:1 }}>
@@ -515,35 +526,57 @@ export default function AgendaApp() {
             </div>
 
             <div style={{ display:"flex", gap:"8px" }}>
-              <button onClick={()=>{setShowModal(false); setEditingTask(null); setNewTask({ name: "", emoji: "📌", color: "#94a3b8", bg: "#0a1020", border: "#334155", mins: 30 });}} style={{ flex:1, padding:"10px", background:"transparent", border:"1px solid #334155", borderRadius:"6px", color:"#94a3b8", fontSize:"12px", fontFamily:"inherit", cursor:"pointer" }}>
+              <button onClick={()=>{setShowModal(false); setEditingTask(null); setNewTask({ name: "", emoji: "📌", color: "#94a3b8", bg: "#94a3b822", border: "#334155", mins: 30 });}} style={{ flex:1, padding:"10px", background:"transparent", border:"1px solid #334155", borderRadius:"6px", color:"#94a3b8", fontSize:"12px", fontFamily:"inherit", cursor:"pointer" }}>
                 Cancelar
               </button>
               <button onClick={async () => {
                 if (!newTask.name.trim()) return;
                 try {
-                  const bg = newTask.color + "22";
-                  const border = newTask.color;
-                  
-                  if (editingTask) {
-                    // Edit mode - delete old and create new
-                    await apiDeleteTask(editingTask.id);
-                  }
-                  
-                  const res = await apiCreateTask({ 
+                  const bg = newTask.bg ?? `${newTask.color}22`;
+                  const border = newTask.border ?? newTask.color;
+                  const payload = {
                     name: newTask.name,
                     emoji: newTask.emoji,
                     color: newTask.color,
-                    bg: bg,
-                    border: border,
-                    mins: newTask.mins
-                  }, useProd);
-                  if (res && res.ok) {
-                    const id = res.id || Date.now();
-                    setCustomTasks({ ...customTasks, [`custom_${id}`]: { emoji: newTask.emoji, label: newTask.name, color: newTask.color, bg, border: newTask.color, mins: newTask.mins } });
-                    setShowModal(false);
-                    setEditingTask(null);
-                    setNewTask({ name: "", emoji: "📌", color: "#94a3b8", bg: "#0a1020", border: "#334155", mins: 30 });
+                    bg,
+                    border,
+                    mins: newTask.mins,
+                  };
+
+                  if (editingTask) {
+                    await apiUpdateTask(editingTask.id, payload);
+                    setCustomTasks({
+                      ...customTasks,
+                      [`custom_${editingTask.id}`]: {
+                        emoji: payload.emoji,
+                        label: payload.name,
+                        color: payload.color,
+                        bg: payload.bg,
+                        border: payload.border,
+                        mins: payload.mins,
+                      },
+                    });
+                  } else {
+                    const res = await apiCreateTask(payload);
+                    if (res && res.ok) {
+                      const id = res.id || Date.now();
+                      setCustomTasks({
+                        ...customTasks,
+                        [`custom_${id}`]: {
+                          emoji: payload.emoji,
+                          label: payload.name,
+                          color: payload.color,
+                          bg: payload.bg,
+                          border: payload.border,
+                          mins: payload.mins,
+                        },
+                      });
+                    }
                   }
+
+                  setShowModal(false);
+                  setEditingTask(null);
+                  setNewTask({ name: "", emoji: "📌", color: "#94a3b8", bg: "#94a3b822", border: "#334155", mins: 30 });
                 } catch (e) { 
                   console.error(e);
                   alert("Error: " + e.message);
