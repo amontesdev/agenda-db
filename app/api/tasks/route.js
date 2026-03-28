@@ -17,7 +17,7 @@ export async function GET(req) {
       sql: "SELECT * FROM custom_tasks ORDER BY created_at DESC",
     });
 
-    return NextResponse.json({ tasks: result.rows });
+    return NextResponse.json({ tasks: result.rows || [] });
 
   } catch (err) {
     console.error("[GET /api/tasks]", err);
@@ -59,7 +59,7 @@ export async function POST(req) {
 
     const lastRow = await db.execute({ sql: "SELECT last_insert_rowid() as id" });
     console.log("[POST /api/tasks] Last row:", lastRow);
-    const insertId = lastRow.rows[0].id;
+    const insertId = lastRow?.rows?.[0]?.id || Date.now();
 
     return NextResponse.json({ ok: true, id: insertId });
 
