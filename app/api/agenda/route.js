@@ -23,7 +23,7 @@ export async function GET(req) {
     }
 
     const result = await db.execute({
-      sql:  "SELECT blocks, updated_at FROM schedules WHERE day = ? AND option = ?",
+      sql:  "SELECT blocks, start_time, updated_at FROM schedules WHERE day = ? AND option = ?",
       args: [day, parseInt(option)],
     });
 
@@ -37,6 +37,7 @@ export async function GET(req) {
       day,
       option:     parseInt(option),
       blocks:     JSON.parse(row.blocks),
+      startTime:  row.start_time,
       updated_at: row.updated_at,
     });
 
@@ -55,21 +56,24 @@ export async function POST(req) {
   try {
     await ensureDB();
     const body = await req.json();
-    const { day, option, blocks } = body;
+    const { day, option, blocks, startTime } = body;
 
     if (!day || !option || !Array.isArray(blocks)) {
       return NextResponse.json({ error: "Body inválido: se requiere day, option, blocks[]" }, { status: 400 });
     }
 
+    const st = startTime || "04:30";
+
     await db.execute({
       sql: `
-        INSERT INTO schedules (day, option, blocks, updated_at)
-        VALUES (?, ?, ?, datetime('now'))
+        INSERT INTO schedules (day, option, blocks, start_time, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
         ON CONFLICT(day, option) DO UPDATE SET
           blocks     = excluded.blocks,
+          start_time = excluded.start_time,
           updated_at = excluded.updated_at
       `,
-      args: [day, parseInt(option), JSON.stringify(blocks)],
+      args: [day, parseInt(option), JSON.stringify(blocks), st],
     });
 
     return NextResponse.json({ ok: true, day, option, saved: blocks.length });

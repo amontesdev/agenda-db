@@ -11,7 +11,7 @@ const ACTIVITIES = {
   desayuno:   { emoji: "🍳", label: "Desayuno",               color: "#fdba74", bg: "#1c0b00", border: "#c2410c" },
   almuerzo:   { emoji: "🥗", label: "Almuerzo",               color: "#bef264", bg: "#101f02", border: "#4d7c0f" },
   cena:       { emoji: "🍽️", label: "Cena",                   color: "#fca5a5", bg: "#1f0505", border: "#b91c1c" },
-  pausa:      { emoji: "☕", label: "Pausa",                  color: "#94a3b8", bg: "#0a1020", border: "#334155" },
+  pausa:      { emoji: "☕", label: "Pausa",                  color: "#94a3b8", bg: "#0a1020", border: "#cbd5e1" },
   libre:      { emoji: "☀️", label: "Tiempo Libre",           color: "#fde68a", bg: "#1a1000", border: "#92400e" },
 };
 
@@ -38,13 +38,14 @@ const PRESETS = {
   },
 };
 
-const DAY_STARTS = { semana:{h:4,m:30}, sabado:{h:7,m:0}, domingo:{h:8,m:0} };
+const DAY_STARTS = { semana:"04:30", sabado:"07:00", domingo:"08:00" };
 const DAY_LABELS  = { semana:"Lun — Vie", sabado:"Sábado", domingo:"Domingo" };
 
 let _uid = 1;
 const mkId   = () => ++_uid;
 const seed   = (arr) => arr.map(b => ({ ...b, id: mkId() }));
-const toTime = (sh, sm, extra) => {
+const toTime = (startTime, extra) => {
+  const [sh, sm] = startTime.split(":").map(Number);
   const t = sh * 60 + sm + extra;
   return `${Math.floor(t/60)%24}:${(t%60).toString().padStart(2,"0")}`;
 };
@@ -62,14 +63,30 @@ async function apiLoad(day, option) {
   return res.json();
 }
 
-async function apiSave(day, option, blocks) {
+async function apiSave(day, option, blocks, startTime) {
   const plain = blocks.map(({ id, ...rest }) => rest);
   const res = await fetch("/api/agenda", {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ day, option, blocks: plain }),
+    body:    JSON.stringify({ day, option, blocks: plain, startTime }),
   });
   if (!res.ok) throw new Error("Error al guardar en SQLite");
+  return res.json();
+}
+
+async function apiLoadTasks() {
+  const res = await fetch("/api/tasks");
+  if (!res.ok) throw new Error("Error al cargar tareas");
+  return res.json();
+}
+
+async function apiCreateTask(task) {
+  const res = await fetch("/api/tasks", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(task),
+  });
+  if (!res.ok) throw new Error("Error al crear tarea");
   return res.json();
 }
 
@@ -77,7 +94,11 @@ async function apiSave(day, option, blocks) {
 export default function AgendaApp() {
   const [day,      setDay]      = useState("semana");
   const [opt,      setOpt]      = useState(1);
+  const [startTime, setStartTime] = useState("04:30");
   const [blocks,   setBlocks]   = useState(() => seed(PRESETS.semana[1]));
+  const [customTasks, setCustomTasks] = useState({});
+  const [showModal, setShowModal] = useState(false);
+  const [newTask, setNewTask] = useState({ name: "", emoji: "📌", color: "#94a3b8", bg: "#0a1020", border: "#334155", mins: 30 });
   const [editId,   setEditId]   = useState(null);
   const [editVal,  setEditVal]  = useState("");
   const [dragIdx,  setDragIdx]  = useState(null);
@@ -98,11 +119,13 @@ export default function AgendaApp() {
       const data = await apiLoad(d, p);
       if (data?.found) {
         setBlocks(seed(data.blocks));
+        setStartTime(data.startTime || DAY_STARTS[d]);
         setSavedAt(new Date(data.updated_at).toLocaleTimeString("es-CO", {hour:"2-digit",minute:"2-digit"}));
         pushLog(`✓ ${data.blocks.length} bloques cargados`, "ok");
         setDbStatus("ok");
       } else {
         setBlocks(seed(PRESETS[d][p]));
+        setStartTime(DAY_STARTS[d]);
         pushLog(`(sin datos) → cargando preset`, "warn");
         setDbStatus("empty");
       }
@@ -120,7 +143,7 @@ export default function AgendaApp() {
       const plain = blocks.map(({ id, ...rest }) => rest);
       pushLog(`INSERT OR REPLACE INTO schedules (day='${day}', option=${opt}, blocks[${plain.length}])`, "query");
       try {
-        await apiSave(day, opt, blocks);
+        await apiSave(day, opt, blocks, startTime);
         const ts = new Date().toLocaleTimeString("es-CO", {hour:"2-digit",minute:"2-digit"});
         setSavedAt(ts);
         setDbStatus("ok");
@@ -131,11 +154,18 @@ export default function AgendaApp() {
       }
     }, 700);
     return () => clearTimeout(t);
-  }, [blocks, day, opt, loaded]);
+  }, [blocks, day, opt, startTime, loaded]);
 
   /* ── Mount: cargar estado actual ── */
   useEffect(() => {
-    loadFromDB("semana", 1).finally(() => setLoaded(true));
+    Promise.all([
+      loadFromDB("semana", 1),
+      apiLoadTasks().then(data => {
+        const tasks = {};
+        data.tasks.forEach(t => { tasks[`custom_${t.id}`] = { emoji: t.emoji, label: t.name, color: t.color, bg: t.bg, border: t.border, mins: t.mins }; });
+        setCustomTasks(tasks);
+      }).catch(() => {})
+    ]).finally(() => setLoaded(true));
   }, []);
 
   /* ── Cambiar día/opción ── */
@@ -161,7 +191,11 @@ export default function AgendaApp() {
 
   /* ── CRUD bloques ── */
   const remove   = (id)   => setBlocks(blocks.filter(b => b.id !== id));
-  const addBlk   = (type) => setBlocks([...blocks, { type, mins: DEFAULT_MINS[type], id: mkId() }]);
+  const addBlk   = (type) => {
+    const isCustom = type.startsWith("custom_");
+    const mins = isCustom ? (customTasks[type]?.mins || 30) : DEFAULT_MINS[type];
+    setBlocks([...blocks, { type, mins, id: mkId() }]);
+  };
   const saveEdit = ()     => {
     const m = parseInt(editVal);
     if (!isNaN(m) && m > 0) setBlocks(blocks.map(b => b.id === editId ? {...b, mins:m} : b));
@@ -169,11 +203,10 @@ export default function AgendaApp() {
   };
 
   /* ── Timeline ── */
-  const { h:sh, m:sm } = DAY_STARTS[day];
   let off = 0;
   const timed = blocks.map(b => {
-    const s = toTime(sh, sm, off); off += b.mins;
-    return { ...b, start:s, end:toTime(sh, sm, off) };
+    const s = toTime(startTime, off); off += b.mins;
+    return { ...b, start:s, end:toTime(startTime, off) };
   });
   const totalMins      = blocks.reduce((s,b)=>s+b.mins,0);
   const productiveMins = blocks.filter(b=>["trabajo","software","interviews","tiktok"].includes(b.type))
@@ -197,7 +230,7 @@ export default function AgendaApp() {
       fontFamily:"'Space Mono','Courier New',monospace", display:"flex", flexDirection:"column" }}>
 
       {/* ── Header ── */}
-      <div style={{ background:"#08101a", borderBottom:"1px solid #1e293b", padding:"16px 22px" }}>
+      <div style={{ background:"#08101a", borderBottom:"1px solid #334155", padding:"16px 22px" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:"8px" }}>
           <div>
             <div style={{ fontSize:"17px", fontWeight:"700", color:"#f1f5f9" }}>⚡ MI AGENDA</div>
@@ -207,19 +240,19 @@ export default function AgendaApp() {
           </div>
           <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:"5px" }}>
             <div style={{ display:"flex", alignItems:"center", gap:"6px",
-              background:"#0a1525", border:"1px solid #1e293b", borderRadius:"20px", padding:"4px 12px" }}>
+              background:"#0a1525", border:"1px solid #334155", borderRadius:"20px", padding:"4px 12px" }}>
               <span style={{ width:"7px", height:"7px", borderRadius:"50%", background:sc.dot, flexShrink:0,
                 boxShadow:sc.glow ? `0 0 8px ${sc.dot}` : "none", display:"inline-block", transition:"all 0.4s" }}/>
               <span style={{ fontSize:"9px", letterSpacing:"1.5px", color:sc.dot, transition:"color 0.4s" }}>
                 🗄️ SQLite — {sc.label}
               </span>
               {savedAt && dbStatus==="ok" && (
-                <span style={{ fontSize:"9px", color:"#334155", marginLeft:"4px" }}>· {savedAt}</span>
+                <span style={{ fontSize:"9px", color:"#cbd5e1", marginLeft:"4px" }}>· {savedAt}</span>
               )}
             </div>
-            <div style={{ fontSize:"10px", color:"#64748b" }}>
+            <div style={{ fontSize:"10px", color:"#cbd5e1" }}>
               Total: <b style={{ color:"#f8fafc" }}>{fmtMins(totalMins)}</b>
-              <span style={{ color:"#1e293b" }}> · </span>
+              <span style={{ color:"#334155" }}> · </span>
               Productivo: <b style={{ color:"#fbbf24" }}>{fmtMins(productiveMins)}</b>
             </div>
           </div>
@@ -230,24 +263,31 @@ export default function AgendaApp() {
           {Object.keys(PRESETS).map(d => (
             <button key={d} onClick={() => switchTo(d, opt)} style={{
               padding:"5px 13px", border:"1px solid", cursor:"pointer",
-              borderColor: day===d ? "#60a5fa" : "#1e293b",
+              borderColor: day===d ? "#60a5fa" : "#334155",
               background:  day===d ? "#0f2340" : "transparent",
-              color:       day===d ? "#93c5fd" : "#475569",
+              color:       day===d ? "#93c5fd" : "#cbd5e1",
               borderRadius:"6px", fontSize:"10px", fontFamily:"inherit",
               fontWeight:"700", letterSpacing:"1px", transition:"all 0.15s",
             }}>{DAY_LABELS[d]}</button>
           ))}
-          <div style={{ width:"1px", height:"22px", background:"#1e293b", margin:"0 3px" }}/>
+          <span style={{ width:"1px", height:"22px", background:"#334155", margin:"0 3px", display:"inline-block" }}/>
           {[1,2,3].map(p => (
             <button key={p} onClick={() => switchTo(day, p)} style={{
               padding:"5px 12px", border:"1px solid", cursor:"pointer",
-              borderColor: opt===p ? "#c084fc" : "#1e293b",
+              borderColor: opt===p ? "#c084fc" : "#334155",
               background:  opt===p ? "#150822" : "transparent",
-              color:       opt===p ? "#c084fc" : "#475569",
+              color:       opt===p ? "#c084fc" : "#cbd5e1",
               borderRadius:"6px", fontSize:"10px", fontFamily:"inherit",
               fontWeight:"700", transition:"all 0.15s",
             }}>OPT {p}</button>
           ))}
+          <span style={{ width:"1px", height:"22px", background:"#334155", margin:"0 3px", display:"inline-block" }}/>
+          <input type="time" value={startTime}
+            onChange={e=>setStartTime(e.target.value)}
+            suppressHydrationWarning
+            style={{ background:"#0a1525", border:"1px solid #334155",
+              color:"#6ee7b7", borderRadius:"6px", padding:"4px 8px",
+              fontSize:"11px", fontFamily:"inherit", outline:"none", cursor:"pointer" }} />
         </div>
       </div>
 
@@ -261,7 +301,7 @@ export default function AgendaApp() {
           </div>
           <div onDragOver={e=>e.preventDefault()} onDrop={handleDrop}>
             {timed.map((b, i) => {
-              const act = ACTIVITIES[b.type];
+              const act = ACTIVITIES[b.type] || customTasks[b.type] || { emoji: "📌", label: b.type, color: "#94a3b8", bg: "#0a1020", border: "#334155" };
               const h   = Math.max(52, Math.min(b.mins * 0.75, 160));
               const isD = dragIdx === i;
               const isO = overIdx === i && dragIdx !== null && dragIdx !== i;
@@ -277,7 +317,7 @@ export default function AgendaApp() {
                   {/* Hora */}
                   <div style={{ width:"60px", flexShrink:0, display:"flex", flexDirection:"column",
                     justifyContent:"space-between", paddingRight:"10px", paddingBottom:"2px",
-                    fontSize:"10px", color:"#334155", userSelect:"none" }}>
+                    fontSize:"10px", color:"#cbd5e1", userSelect:"none" }}>
                     <span>{b.start}</span><span>{b.end}</span>
                   </div>
                   {/* Card */}
@@ -300,16 +340,16 @@ export default function AgendaApp() {
                             <input type="number" value={editVal}
                               onChange={e=>setEditVal(e.target.value)}
                               onKeyDown={e=>e.key==="Enter"&&saveEdit()}
-                              style={{ width:"52px", background:"#1e293b", border:"1px solid #475569",
+                              style={{ width:"52px", background:"#334155", border:"1px solid #475569",
                                 color:"#e2e8f0", borderRadius:"4px", padding:"3px 6px",
                                 fontSize:"11px", fontFamily:"inherit", outline:"none" }}
                               autoFocus />
-                            <span style={{ fontSize:"9px", color:"#64748b" }}>min</span>
+                            <span style={{ fontSize:"9px", color:"#cbd5e1" }}>min</span>
                             <button type="button" onClick={saveEdit} style={{ background:"#047857", border:"none",
                               color:"white", borderRadius:"4px", padding:"3px 9px",
                               cursor:"pointer", fontSize:"11px", fontFamily:"inherit" }}>✓</button>
                             <button onClick={()=>setEditId(null)} style={{ background:"transparent",
-                              border:"1px solid #334155", color:"#64748b", borderRadius:"4px",
+                              border:"1px solid #cbd5e1", color:"#cbd5e1", borderRadius:"4px",
                               padding:"3px 7px", cursor:"pointer", fontSize:"11px", fontFamily:"inherit" }}>✕</button>
                           </div>
                         ) : (
@@ -324,7 +364,7 @@ export default function AgendaApp() {
                     <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
                       <span style={{ color:"#2d3f55", fontSize:"18px", cursor:"grab", userSelect:"none" }}>⠿</span>
                       <button onClick={()=>remove(b.id)} style={{
-                        background:"transparent", border:"1px solid #1e293b", color:"#475569",
+                        background:"transparent", border:"1px solid #334155", color:"#475569",
                         cursor:"pointer", fontSize:"11px", borderRadius:"4px",
                         padding:"2px 7px", fontFamily:"inherit", lineHeight:1.2 }}>✕</button>
                     </div>
@@ -342,12 +382,12 @@ export default function AgendaApp() {
 
         {/* ─ Panel derecho ─ */}
         <div style={{ width:"200px", flexShrink:0, background:"#07101a",
-          borderLeft:"1px solid #1e293b", padding:"18px 13px", overflowY:"auto",
+          borderLeft:"1px solid #334155", padding:"18px 13px", overflowY:"auto",
           display:"flex", flexDirection:"column", gap:"0" }}>
 
           {/* Agregar */}
-          <div style={{ fontSize:"9px", color:"#334155", letterSpacing:"2.5px", marginBottom:"11px" }}>+ AGREGAR</div>
-          {Object.entries(ACTIVITIES).map(([key, act]) => (
+          <div style={{ fontSize:"9px", color:"#cbd5e1", letterSpacing:"2.5px", marginBottom:"11px" }}>+ AGREGAR</div>
+          {Object.entries({...ACTIVITIES, ...customTasks}).map(([key, act]) => (
             <button key={key} onClick={()=>addBlk(key)} style={{
               display:"flex", alignItems:"center", gap:"7px", width:"100%",
               padding:"7px 9px", marginBottom:"4px",
@@ -359,10 +399,20 @@ export default function AgendaApp() {
               <span>{act.label}</span>
             </button>
           ))}
+          <button onClick={()=>setShowModal(true)} style={{
+            display:"flex", alignItems:"center", gap:"7px", width:"100%",
+            padding:"7px 9px", marginTop:"8px", marginBottom:"4px",
+            background:"transparent", border:"1px dashed #475569",
+            borderRadius:"7px", cursor:"pointer", color:"#64748b",
+            fontSize:"10px", fontFamily:"inherit", fontWeight:"600",
+            textAlign:"left", transition:"all 0.12s", lineHeight:"1.4" }}>
+            <span style={{ flexShrink:0 }}>+</span>
+            <span>Nueva Tarea</span>
+          </button>
 
           {/* Resumen */}
-          <div style={{ marginTop:"18px", paddingTop:"16px", borderTop:"1px solid #1e293b" }}>
-            <div style={{ fontSize:"9px", color:"#334155", letterSpacing:"2px", marginBottom:"9px" }}>RESUMEN</div>
+          <div style={{ marginTop:"18px", paddingTop:"16px", borderTop:"1px solid #334155" }}>
+            <div style={{ fontSize:"9px", color:"#cbd5e1", letterSpacing:"2px", marginBottom:"9px" }}>RESUMEN</div>
             {[
               ["💼","Trabajo",     ["trabajo"]],
               ["🔬","Crecimiento", ["software","interviews"]],
@@ -382,8 +432,8 @@ export default function AgendaApp() {
           </div>
 
           {/* SQL Log */}
-          <div style={{ marginTop:"18px", paddingTop:"16px", borderTop:"1px solid #1e293b", flex:1 }}>
-            <div style={{ fontSize:"9px", color:"#334155", letterSpacing:"2px", marginBottom:"9px" }}>
+          <div style={{ marginTop:"18px", paddingTop:"16px", borderTop:"1px solid #334155", flex:1 }}>
+            <div style={{ fontSize:"9px", color:"#cbd5e1", letterSpacing:"2px", marginBottom:"9px" }}>
               SQL LOG
             </div>
             <div style={{ fontSize:"8.5px", lineHeight:"1.8", maxHeight:"220px", overflowY:"auto" }}>
@@ -398,6 +448,60 @@ export default function AgendaApp() {
           </div>
         </div>
       </div>
+
+      {/* Modal para nueva tarea */}
+      {showModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}
+          onClick={()=>setShowModal(false)}>
+          <div style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:"12px", padding:"24px", width:"300px", maxWidth:"90vw" }}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{ fontSize:"14px", fontWeight:"700", color:"#f1f5f9", marginBottom:"16px" }}>Nueva Tarea</div>
+            
+            <div style={{ marginBottom:"12px" }}>
+              <div style={{ fontSize:"10px", color:"#94a3b8", marginBottom:"4px" }}>Nombre</div>
+              <input type="text" value={newTask.name} onChange={e=>setNewTask({...newTask, name:e.target.value})}
+                style={{ width:"100%", background:"#1e293b", border:"1px solid #334155", borderRadius:"6px", padding:"8px", color:"#f1f5f9", fontSize:"13px", fontFamily:"inherit", outline:"none" }} />
+            </div>
+
+            <div style={{ marginBottom:"12px" }}>
+              <div style={{ fontSize:"10px", color:"#94a3b8", marginBottom:"4px" }}>Emoji</div>
+              <input type="text" value={newTask.emoji} onChange={e=>setNewTask({...newTask, emoji:e.target.value})}
+                style={{ width:"100%", background:"#1e293b", border:"1px solid #334155", borderRadius:"6px", padding:"8px", color:"#f1f5f9", fontSize:"13px", fontFamily:"inherit", outline:"none" }} />
+            </div>
+
+            <div style={{ display:"flex", gap:"12px", marginBottom:"16px" }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:"10px", color:"#94a3b8", marginBottom:"4px" }}>Color</div>
+                <input type="color" value={newTask.color} onChange={e=>setNewTask({...newTask, color:e.target.value, border:e.target.value})}
+                  style={{ width:"100%", height:"36px", background:"#1e293b", border:"1px solid #334155", borderRadius:"6px", cursor:"pointer" }} />
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:"10px", color:"#94a3b8", marginBottom:"4px" }}>Minutos</div>
+                <input type="number" value={newTask.mins} onChange={e=>setNewTask({...newTask, mins:parseInt(e.target.value)||30})}
+                  style={{ width:"100%", background:"#1e293b", border:"1px solid #334155", borderRadius:"6px", padding:"8px", color:"#f1f5f9", fontSize:"13px", fontFamily:"inherit", outline:"none" }} />
+              </div>
+            </div>
+
+            <div style={{ display:"flex", gap:"8px" }}>
+              <button onClick={()=>setShowModal(false)} style={{ flex:1, padding:"10px", background:"transparent", border:"1px solid #334155", borderRadius:"6px", color:"#94a3b8", fontSize:"12px", fontFamily:"inherit", cursor:"pointer" }}>
+                Cancelar
+              </button>
+              <button onClick={async () => {
+                if (!newTask.name.trim()) return;
+                try {
+                  const bg = newTask.color + "22";
+                  const res = await apiCreateTask({ ...newTask, bg });
+                  setCustomTasks({ ...customTasks, [`custom_${res.id}`]: { emoji: newTask.emoji, label: newTask.name, color: newTask.color, bg, border: newTask.color, mins: newTask.mins } });
+                  setShowModal(false);
+                  setNewTask({ name: "", emoji: "📌", color: "#94a3b8", bg: "#0a1020", border: "#334155", mins: 30 });
+                } catch (e) { console.error(e); }
+              }} style={{ flex:1, padding:"10px", background:"#047857", border:"none", borderRadius:"6px", color:"white", fontSize:"12px", fontFamily:"inherit", cursor:"pointer" }}>
+                Crear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
