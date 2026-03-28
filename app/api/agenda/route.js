@@ -20,7 +20,8 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const day    = searchParams.get("day");
     const option = searchParams.get("option");
-    const prod   = searchParams.get("prod") === "true";
+    const prodParam = searchParams.get("prod");
+    const prod   = prodParam === "true" || (prodParam === null && !!process.env.TURSO_DATABASE_URL);
 
     if (!day || !option) {
       return NextResponse.json({ error: "Faltan parámetros: day, option" }, { status: 400 });
@@ -70,7 +71,8 @@ export async function GET(req) {
 export async function POST(req) {
   try {
     const { searchParams } = new URL(req.url);
-    const prod = searchParams.get("prod") === "true";
+    const prodParam = searchParams.get("prod");
+    const prod = prodParam === "true" || (prodParam === null && !!process.env.TURSO_DATABASE_URL);
 
     await ensureDB(prod);
     const client = getDb(prod);

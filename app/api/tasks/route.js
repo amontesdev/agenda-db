@@ -17,7 +17,8 @@ async function ensureDB(useProduction) {
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
-    const prod = searchParams.get("prod") === "true";
+    const prodParam = searchParams.get("prod");
+    const prod = prodParam === "true" || (prodParam === null && !!process.env.TURSO_DATABASE_URL);
     
     await ensureDB(prod);
     const client = getDb(prod);
@@ -42,7 +43,8 @@ export async function GET(req) {
 export async function POST(req) {
   try {
     const { searchParams } = new URL(req.url);
-    const prod = searchParams.get("prod") === "true";
+    const prodParam = searchParams.get("prod");
+    const prod = prodParam === "true" || (prodParam === null && !!process.env.TURSO_DATABASE_URL);
     
     console.log("[POST /api/tasks] prod:", prod);
     
@@ -104,7 +106,8 @@ export async function POST(req) {
 export async function DELETE(req) {
   try {
     const { searchParams } = new URL(req.url);
-    const prod = searchParams.get("prod") === "true";
+    const prodParam = searchParams.get("prod");
+    const prod = prodParam === "true" || (prodParam === null && !!process.env.TURSO_DATABASE_URL);
     const id = searchParams.get("id");
 
     await ensureDB(prod);
