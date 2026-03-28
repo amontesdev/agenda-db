@@ -18,7 +18,8 @@ export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
     const prodParam = searchParams.get("prod");
-    const prod = prodParam === "true" || (prodParam === null && !!process.env.TURSO_DATABASE_URL);
+    const isVercel = !!process.env.VERCEL;
+    const prod = prodParam === "true" || (prodParam === null && isVercel);
     
     await ensureDB(prod);
     const client = getDb(prod);
@@ -44,7 +45,8 @@ export async function POST(req) {
   try {
     const { searchParams } = new URL(req.url);
     const prodParam = searchParams.get("prod");
-    const prod = prodParam === "true" || (prodParam === null && !!process.env.TURSO_DATABASE_URL);
+    const isVercel = !!process.env.VERCEL;
+    const prod = prodParam === "true" || (prodParam === null && isVercel);
     
     console.log("[POST /api/tasks] prod:", prod);
     
@@ -107,7 +109,8 @@ export async function DELETE(req) {
   try {
     const { searchParams } = new URL(req.url);
     const prodParam = searchParams.get("prod");
-    const prod = prodParam === "true" || (prodParam === null && !!process.env.TURSO_DATABASE_URL);
+    const isVercel = !!process.env.VERCEL;
+    const prod = prodParam === "true" || (prodParam === null && isVercel);
     const id = searchParams.get("id");
 
     await ensureDB(prod);

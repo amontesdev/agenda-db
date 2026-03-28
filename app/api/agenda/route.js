@@ -21,7 +21,10 @@ export async function GET(req) {
     const day    = searchParams.get("day");
     const option = searchParams.get("option");
     const prodParam = searchParams.get("prod");
-    const prod   = prodParam === "true" || (prodParam === null && !!process.env.TURSO_DATABASE_URL);
+    const isVercel = !!process.env.VERCEL;
+    const prod = prodParam === "true" || (prodParam === null && isVercel);
+
+    console.log("[GET /api/agenda] prod:", prod, "isVercel:", isVercel);
 
     if (!day || !option) {
       return NextResponse.json({ error: "Faltan parámetros: day, option" }, { status: 400 });
@@ -72,7 +75,8 @@ export async function POST(req) {
   try {
     const { searchParams } = new URL(req.url);
     const prodParam = searchParams.get("prod");
-    const prod = prodParam === "true" || (prodParam === null && !!process.env.TURSO_DATABASE_URL);
+    const isVercel = !!process.env.VERCEL;
+    const prod = prodParam === "true" || (prodParam === null && isVercel);
 
     await ensureDB(prod);
     const client = getDb(prod);
