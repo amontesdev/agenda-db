@@ -504,7 +504,15 @@ export default function AgendaApp() {
                 if (!newTask.name.trim()) return;
                 try {
                   const bg = newTask.color + "22";
-                  const res = await apiCreateTask({ ...newTask, bg }, useProd);
+                  const border = newTask.color;
+                  const res = await apiCreateTask({ 
+                    name: newTask.name,
+                    emoji: newTask.emoji,
+                    color: newTask.color,
+                    bg: bg,
+                    border: border,
+                    mins: newTask.mins
+                  }, useProd);
                   if (res && res.ok) {
                     const id = res.id || Date.now();
                     setCustomTasks({ ...customTasks, [`custom_${id}`]: { emoji: newTask.emoji, label: newTask.name, color: newTask.color, bg, border: newTask.color, mins: newTask.mins } });
