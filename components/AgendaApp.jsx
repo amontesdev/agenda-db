@@ -123,7 +123,7 @@ export default function AgendaApp() {
   const [savedAt,  setSavedAt]  = useState(null);
   const [loaded,   setLoaded]   = useState(false);
   const [sqlLog,   setSqlLog]   = useState([]);
-  const [useProd,  setUseProd]  = useState(false);
+  const [useProd,  setUseProd]  = useState(process.env.NODE_ENV === "production");
 
   const pushLog = (msg, type = "info") =>
     setSqlLog(l => [...l.slice(-11), { msg, type, ts: new Date().toLocaleTimeString("es-CO") }]);
