@@ -16,7 +16,7 @@ async function ensureDB(useProduction) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function GET(req) {
   try {
-    const isProd = process.env.NODE_ENV === "production";
+    const isProd = !!process.env.VERCEL;
     
     await ensureDB(isProd);
     const client = getDb(isProd);
@@ -40,7 +40,7 @@ export async function GET(req) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function POST(req) {
   try {
-    const isProd = process.env.NODE_ENV === "production";
+    const isProd = !!process.env.VERCEL;
     
     await ensureDB(isProd);
     const client = getDb(isProd);
@@ -97,8 +97,7 @@ export async function POST(req) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function DELETE(req) {
   try {
-    const { searchParams } = new URL(req.url);
-    const isProd = process.env.NODE_ENV === "production";
+    const isProd = !!process.env.VERCEL;
     const id = searchParams.get("id");
 
     await ensureDB(isProd);

@@ -20,7 +20,7 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const day    = searchParams.get("day");
     const option = searchParams.get("option");
-    const isProd = process.env.NODE_ENV === "production";
+    const isProd = !!process.env.VERCEL;
 
     if (!day || !option) {
       return NextResponse.json({ error: "Faltan parámetros: day, option" }, { status: 400 });
@@ -69,7 +69,7 @@ export async function GET(req) {
 ──────────────────────────────────────────────────────────────────────── */
 export async function POST(req) {
   try {
-    const isProd = process.env.NODE_ENV === "production";
+    const isProd = !!process.env.VERCEL;
 
     await ensureDB(isProd);
     const client = getDb(isProd);
