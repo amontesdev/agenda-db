@@ -22,10 +22,18 @@ export async function GET(req) {
       return NextResponse.json({ error: "Faltan parámetros: day, option" }, { status: 400 });
     }
 
-    const result = await db.execute({
-      sql:  "SELECT blocks, start_time, updated_at FROM schedules WHERE day = ? AND option = ?",
-      args: [day, parseInt(option)],
-    });
+    let result;
+    try {
+      result = await db.execute({
+        sql:  "SELECT blocks, start_time, updated_at FROM schedules WHERE day = ? AND option = ?",
+        args: [day, parseInt(option)],
+      });
+    } catch (e) {
+      result = await db.execute({
+        sql:  "SELECT blocks, updated_at FROM schedules WHERE day = ? AND option = ?",
+        args: [day, parseInt(option)],
+      });
+    }
 
     if (result.rows.length === 0) {
       return NextResponse.json({ found: false }, { status: 404 });
@@ -37,7 +45,7 @@ export async function GET(req) {
       day,
       option:     parseInt(option),
       blocks:     JSON.parse(row.blocks),
-      startTime:  row.start_time,
+      startTime:  row.start_time || "04:30",
       updated_at: row.updated_at,
     });
 
@@ -64,17 +72,30 @@ export async function POST(req) {
 
     const st = startTime || "04:30";
 
-    await db.execute({
-      sql: `
-        INSERT INTO schedules (day, option, blocks, start_time, updated_at)
-        VALUES (?, ?, ?, ?, datetime('now'))
-        ON CONFLICT(day, option) DO UPDATE SET
-          blocks     = excluded.blocks,
-          start_time = excluded.start_time,
-          updated_at = excluded.updated_at
-      `,
-      args: [day, parseInt(option), JSON.stringify(blocks), st],
-    });
+    try {
+      await db.execute({
+        sql: `
+          INSERT INTO schedules (day, option, blocks, start_time, updated_at)
+          VALUES (?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(day, option) DO UPDATE SET
+            blocks     = excluded.blocks,
+            start_time = excluded.start_time,
+            updated_at = excluded.updated_at
+        `,
+        args: [day, parseInt(option), JSON.stringify(blocks), st],
+      });
+    } catch (e) {
+      await db.execute({
+        sql: `
+          INSERT INTO schedules (day, option, blocks, updated_at)
+          VALUES (?, ?, ?, datetime('now'))
+          ON CONFLICT(day, option) DO UPDATE SET
+            blocks     = excluded.blocks,
+            updated_at = excluded.updated_at
+        `,
+        args: [day, parseInt(option), JSON.stringify(blocks)],
+      });
+    }
 
     return NextResponse.json({ ok: true, day, option, saved: blocks.length });
 
