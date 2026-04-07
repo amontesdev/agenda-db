@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 /* ─── Datos ────────────────────────────────────────────────────────────── */
 const ACTIVITIES = {
@@ -56,34 +57,40 @@ const fmtMins = (m) => {
 };
 
 /* ─── API helpers ──────────────────────────────────────────────────────── */
-async function apiLoad(day, option) {
-  const res = await fetch(`/api/agenda?day=${day}&option=${option}`);
+const authHeaders = (token) => token ? { Authorization: `Bearer ${token}` } : {};
+
+async function apiLoad(day, option, token) {
+  const res = await fetch(`/api/agenda?day=${day}&option=${option}`, {
+    headers: authHeaders(token),
+  });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("Error al cargar desde SQLite");
   return res.json();
 }
 
-async function apiSave(day, option, blocks, startTime) {
+async function apiSave(day, option, blocks, startTime, token) {
   const plain = blocks.map(({ id, ...rest }) => rest);
   const res = await fetch("/api/agenda", {
     method:  "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
     body:    JSON.stringify({ day, option, blocks: plain, startTime }),
   });
   if (!res.ok) throw new Error("Error al guardar en SQLite");
   return res.json();
 }
 
-async function apiLoadTasks() {
-  const res = await fetch("/api/tasks");
+async function apiLoadTasks(token) {
+  const res = await fetch("/api/tasks", {
+    headers: authHeaders(token),
+  });
   if (!res.ok) throw new Error("Error al cargar tareas");
   return res.json();
 }
 
-async function apiCreateTask(task) {
+async function apiCreateTask(task, token) {
   const res = await fetch("/api/tasks", {
     method:  "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
     body:    JSON.stringify(task),
   });
   const data = await res.json().catch(() => ({}));
@@ -91,10 +98,10 @@ async function apiCreateTask(task) {
   return data || { ok: false };
 }
 
-async function apiUpdateTask(id, task) {
+async function apiUpdateTask(id, task, token) {
   const res = await fetch(`/api/tasks?id=${id}`, {
     method:  "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders(token) },
     body:    JSON.stringify(task),
   });
   const data = await res.json().catch(() => ({}));
@@ -102,9 +109,10 @@ async function apiUpdateTask(id, task) {
   return data || { ok: true };
 }
 
-async function apiDeleteTask(id) {
+async function apiDeleteTask(id, token) {
   const res = await fetch(`/api/tasks?id=${id}`, {
     method:  "DELETE",
+    headers: authHeaders(token),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error || "Error al eliminar tarea");
@@ -113,6 +121,7 @@ async function apiDeleteTask(id) {
 
 /* ─── Componente principal ─────────────────────────────────────────────── */
 export default function AgendaApp() {
+  const { token, user, signOut } = useAuth();
   const [day,      setDay]      = useState("semana");
   const [opt,      setOpt]      = useState(1);
   const [startTime, setStartTime] = useState("04:30");
@@ -136,10 +145,11 @@ export default function AgendaApp() {
 
   /* ── Cargar día/opción desde SQLite ── */
   const loadFromDB = useCallback(async (d, p) => {
+    if (!token) return;
     setDbStatus("loading");
     pushLog(`SELECT * FROM schedules WHERE day='${d}' AND option=${p}`, "query");
     try {
-      const data = await apiLoad(d, p);
+      const data = await apiLoad(d, p, token);
       if (data?.found) {
         setBlocks(seed(data.blocks));
         setStartTime(data.startTime || DAY_STARTS[d]);
@@ -156,17 +166,17 @@ export default function AgendaApp() {
       pushLog(`✗ ${e.message}`, "error");
       setDbStatus("error");
     }
-  }, [pushLog]);
+  }, [pushLog, token]);
 
   /* ── Guardar en SQLite (debounce 700ms) ── */
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !token) return;
     setDbStatus("saving");
     const t = setTimeout(async () => {
       const plain = blocks.map(({ id, ...rest }) => rest);
       pushLog(`INSERT OR REPLACE INTO schedules (day='${day}', option=${opt}, blocks[${plain.length}])`, "query");
       try {
-        await apiSave(day, opt, blocks, startTime);
+        await apiSave(day, opt, blocks, startTime, token);
         const ts = new Date().toLocaleTimeString("es-CO", {hour:"2-digit",minute:"2-digit"});
         setSavedAt(ts);
         setDbStatus("ok");
@@ -177,15 +187,16 @@ export default function AgendaApp() {
       }
     }, 700);
     return () => clearTimeout(t);
-  }, [blocks, day, opt, startTime, loaded]);
+  }, [blocks, day, opt, startTime, loaded, token, pushLog]);
 
   /* ── Mount: cargar estado actual ── */
   useEffect(() => {
+    if (!token) return;
     let cancelled = false;
 
     const bootstrap = async () => {
       try {
-        const taskData = await apiLoadTasks();
+        const taskData = await apiLoadTasks(token);
         if (cancelled) return;
 
         const tasks = {};
@@ -213,7 +224,7 @@ export default function AgendaApp() {
     });
 
     return () => { cancelled = true; };
-  }, [loadFromDB, pushLog]);
+  }, [loadFromDB, pushLog, token]);
 
   /* ── Cambiar día/opción ── */
   const switchTo = (d, p) => {
@@ -285,7 +296,21 @@ export default function AgendaApp() {
               SQLITE · TURSO · NEXT.JS · VERCEL
             </div>
           </div>
-            <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:"5px" }}>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:"5px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+              <span style={{ fontSize:"10px", letterSpacing:"1px", color:"#94a3b8" }}>{user?.email}</span>
+              <button onClick={signOut} style={{
+                border:"1px solid #334155",
+                background:"rgba(8,17,26,0.6)",
+                color:"#f87171",
+                fontSize:"10px",
+                letterSpacing:"1px",
+                borderRadius:"999px",
+                padding:"4px 10px",
+                cursor:"pointer",
+                textTransform:"uppercase",
+              }}>Cerrar sesión</button>
+            </div>
             <div style={{ display:"flex", alignItems:"center", gap:"6px",
               background:"#0a1525", border:"1px solid #334155", borderRadius:"20px", padding:"4px 12px" }}>
               <span style={{ width:"7px", height:"7px", borderRadius:"50%", background:sc.dot, flexShrink:0,
@@ -452,7 +477,7 @@ export default function AgendaApp() {
                 {isCustom && (
                   <div style={{ display:"flex", gap:"2px", marginLeft:"4px" }}>
                     <button onClick={(e) => { e.stopPropagation(); const numericId = Number(taskId); setEditingTask({ id: numericId, ...act }); setNewTask({ name: act.label, emoji: act.emoji, color: act.color, bg: act.bg || `${act.color}22`, border: act.border || act.color, mins: typeof act.mins === "number" ? act.mins : parseInt(act.mins) || 30 }); setShowModal(true); }} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#64748b", fontSize:"9px", cursor:"pointer" }}>✎</button>
-                    <button onClick={async (e) => { e.stopPropagation(); if(confirm("Eliminar tarea?")) { try { await apiDeleteTask(taskId); const newTasks = {...customTasks}; delete newTasks[key]; setCustomTasks(newTasks); } catch(e) { alert(e.message); } }}} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#f87171", fontSize:"9px", cursor:"pointer" }}>✕</button>
+                    <button onClick={async (e) => { e.stopPropagation(); if(confirm("Eliminar tarea?")) { try { await apiDeleteTask(taskId, token); const newTasks = {...customTasks}; delete newTasks[key]; setCustomTasks(newTasks); } catch(e) { alert(e.message); } }}} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#f87171", fontSize:"9px", cursor:"pointer" }}>✕</button>
                   </div>
                 )}
               </div>
@@ -560,7 +585,7 @@ export default function AgendaApp() {
                   };
 
                   if (editingTask) {
-                    await apiUpdateTask(editingTask.id, payload);
+                    await apiUpdateTask(editingTask.id, payload, token);
                     setCustomTasks({
                       ...customTasks,
                       [`custom_${editingTask.id}`]: {
@@ -573,7 +598,7 @@ export default function AgendaApp() {
                       },
                     });
                   } else {
-                    const res = await apiCreateTask(payload);
+                    const res = await apiCreateTask(payload, token);
                     if (res && res.ok) {
                       const id = res.id || Date.now();
                       setCustomTasks({

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, initDB } from "@/lib/db";
+import { requireUser } from "@/lib/auth/server";
 
 let dbReady = false;
 
@@ -10,13 +11,10 @@ async function ensureDB() {
   }
 }
 
-/* ────────────────────────────────────────────────────────────────────────
-   GET /api/agenda?day=semana&option=1
-   Retorna los bloques guardados para ese día/opción.
-   Si no existe aún → 404 (el frontend usa el preset por defecto).
-──────────────────────────────────────────────────────────────────────── */
 export async function GET(req) {
   try {
+    const user = await requireUser(req);
+
     const { searchParams } = new URL(req.url);
     const day    = searchParams.get("day");
     const option = searchParams.get("option");
@@ -27,18 +25,10 @@ export async function GET(req) {
 
     await ensureDB();
 
-    let result;
-    try {
-      result = await db.execute({
-        sql:  "SELECT blocks, start_time, updated_at FROM schedules WHERE day = ? AND option = ?",
-        args: [day, parseInt(option)],
-      });
-    } catch (e) {
-      result = await db.execute({
-        sql:  "SELECT blocks, updated_at FROM schedules WHERE day = ? AND option = ?",
-        args: [day, parseInt(option)],
-      });
-    }
+    const result = await db.execute({
+      sql:  "SELECT blocks, start_time, updated_at FROM schedules WHERE user_id = ? AND day = ? AND option = ?",
+      args: [user.uid, day, parseInt(option)],
+    });
 
     if (result.rows.length === 0) {
       return NextResponse.json({ found: false }, { status: 404 });
@@ -56,17 +46,15 @@ export async function GET(req) {
 
   } catch (err) {
     console.error("[GET /api/agenda]", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = err.status || 500;
+    const message = err.message || "Internal error";
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
-/* ────────────────────────────────────────────────────────────────────────
-   POST /api/agenda
-   Body: { day: "semana", option: 1, blocks: [...] }
-   Upsert: inserta o actualiza si ya existe (day, option).
-──────────────────────────────────────────────────────────────────────── */
 export async function POST(req) {
   try {
+    const user = await requireUser(req);
     await ensureDB();
     
     const body = await req.json();
@@ -78,35 +66,24 @@ export async function POST(req) {
 
     const st = startTime || "04:30";
 
-    try {
-      await db.execute({
-        sql: `
-          INSERT INTO schedules (day, option, blocks, start_time, updated_at)
-          VALUES (?, ?, ?, ?, datetime('now'))
-          ON CONFLICT(day, option) DO UPDATE SET
-            blocks     = excluded.blocks,
-            start_time = excluded.start_time,
-            updated_at = excluded.updated_at
-        `,
-        args: [day, parseInt(option), JSON.stringify(blocks), st],
-      });
-    } catch (e) {
-      await db.execute({
-        sql: `
-          INSERT INTO schedules (day, option, blocks, updated_at)
-          VALUES (?, ?, ?, datetime('now'))
-          ON CONFLICT(day, option) DO UPDATE SET
-            blocks     = excluded.blocks,
-            updated_at = excluded.updated_at
-        `,
-        args: [day, parseInt(option), JSON.stringify(blocks)],
-      });
-    }
+    await db.execute({
+      sql: `
+        INSERT INTO schedules (user_id, day, option, blocks, start_time, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(user_id, day, option) DO UPDATE SET
+          blocks     = excluded.blocks,
+          start_time = excluded.start_time,
+          updated_at = excluded.updated_at
+      `,
+      args: [user.uid, day, parseInt(option), JSON.stringify(blocks), st],
+    });
 
     return NextResponse.json({ ok: true, day, option, saved: blocks.length });
 
   } catch (err) {
     console.error("[POST /api/agenda]", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = err.status || 500;
+    const message = err.message || "Internal error";
+    return NextResponse.json({ error: message }, { status });
   }
 }

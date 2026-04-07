@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, initDB } from "@/lib/db";
+import { requireUser } from "@/lib/auth/server";
 
 let dbReady = false;
 
@@ -10,17 +11,14 @@ async function ensureDB() {
   }
 }
 
-/* ────────────────────────────────────────────────────────────────────────
-   GET /api/tasks
-   Retorna todas las tareas personalizadas.
-──────────────────────────────────────────────────────────────────────── */
 export async function GET(req) {
   try {
+    const user = await requireUser(req);
     await ensureDB();
 
     const result = await db.execute({
-      sql: "SELECT * FROM custom_tasks ORDER BY created_at DESC",
-      args: [],
+      sql: "SELECT * FROM custom_tasks WHERE user_id = ? ORDER BY created_at DESC",
+      args: [user.uid],
     });
 
     const tasks = (result?.rows ?? []).map(row => {
@@ -35,17 +33,15 @@ export async function GET(req) {
 
   } catch (err) {
     console.error("[GET /api/tasks]", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = err.status || 500;
+    const message = err.message || "Internal error";
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
-/* ────────────────────────────────────────────────────────────────────────
-   POST /api/tasks
-   Body: { name, emoji, color, bg, border, mins }
-   Crea una nueva tarea personalizada.
-──────────────────────────────────────────────────────────────────────── */
 export async function POST(req) {
   try {
+    const user = await requireUser(req);
     await ensureDB();
     
     let body;
@@ -63,10 +59,11 @@ export async function POST(req) {
 
     const result = await db.execute({
       sql: `
-        INSERT INTO custom_tasks (name, emoji, color, bg, border, mins)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO custom_tasks (user_id, name, emoji, color, bg, border, mins)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
+        user.uid,
         name,
         emoji || "📌",
         color || "#94a3b8",
@@ -86,16 +83,15 @@ export async function POST(req) {
 
   } catch (err) {
     console.error("[POST /api/tasks]", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = err.status || 500;
+    const message = err.message || "Internal error";
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
-/* ────────────────────────────────────────────────────────────────────────
-   DELETE /api/tasks?id=X
-   Elimina una tarea personalizada.
-──────────────────────────────────────────────────────────────────────── */
 export async function DELETE(req) {
   try {
+    const user = await requireUser(req);
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
@@ -108,24 +104,23 @@ export async function DELETE(req) {
     }
 
     await db.execute({
-      sql: "DELETE FROM custom_tasks WHERE id = ?",
-      args: [numericId],
+      sql: "DELETE FROM custom_tasks WHERE id = ? AND user_id = ?",
+      args: [numericId, user.uid],
     });
 
     return NextResponse.json({ ok: true });
 
   } catch (err) {
     console.error("[DELETE /api/tasks]", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = err.status || 500;
+    const message = err.message || "Internal error";
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
-/* ────────────────────────────────────────────────────────────────────────
-   PUT /api/tasks?id=X
-   Actualiza una tarea personalizada existente.
-──────────────────────────────────────────────────────────────────────── */
 export async function PUT(req) {
   try {
+    const user = await requireUser(req);
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
@@ -159,7 +154,7 @@ export async function PUT(req) {
             bg    = ?,
             border = ?,
             mins  = ?
-        WHERE id = ?
+        WHERE id = ? AND user_id = ?
       `,
       args: [
         name,
@@ -169,6 +164,7 @@ export async function PUT(req) {
         border || color || "#334155",
         Number.isFinite(Number(mins)) ? Number(mins) : 30,
         numericId,
+        user.uid,
       ],
     });
 
@@ -176,6 +172,8 @@ export async function PUT(req) {
 
   } catch (err) {
     console.error("[PUT /api/tasks]", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const status = err.status || 500;
+    const message = err.message || "Internal error";
+    return NextResponse.json({ error: message }, { status });
   }
 }
