@@ -121,7 +121,8 @@ async function apiDeleteTask(id, token) {
 
 /* ─── Componente principal ─────────────────────────────────────────────── */
 export default function AgendaApp() {
-  const { token, user, signOut } = useAuth();
+  const { token, user, signOut, claims } = useAuth();
+  const isAdmin = claims?.role === "admin";
   const [day,      setDay]      = useState("semana");
   const [opt,      setOpt]      = useState(1);
   const [startTime, setStartTime] = useState("04:30");
@@ -357,9 +358,10 @@ export default function AgendaApp() {
           <input type="time" value={startTime}
             onChange={e=>setStartTime(e.target.value)}
             suppressHydrationWarning
+            disabled={!isAdmin}
             style={{ background:"#0a1525", border:"1px solid #334155",
               color:"#6ee7b7", borderRadius:"6px", padding:"4px 8px",
-              fontSize:"11px", fontFamily:"inherit", outline:"none", cursor:"pointer" }} />
+              fontSize:"11px", fontFamily:"inherit", outline:"none", cursor: isAdmin ? "pointer" : "not-allowed", opacity: isAdmin ? 1 : 0.5 }} />
         </div>
       </div>
 
@@ -379,7 +381,7 @@ export default function AgendaApp() {
               const isO = overIdx === i && dragIdx !== null && dragIdx !== i;
               const isE = editId === b.id;
               return (
-                <div key={b.id} draggable
+                <div key={b.id} draggable={isAdmin}
                   onDragStart={() => handleDragStart(i)}
                   onDragOver={e => handleDragOver(e, i)}
                   onDrop={handleDrop}
@@ -396,7 +398,7 @@ export default function AgendaApp() {
                   <div style={{ flex:1, minHeight:`${h}px`,
                     background:isO?act.border+"22":act.bg,
                     border:`1.5px solid ${isO?act.color:act.border}`,
-                    borderRadius:"8px", padding:"10px 14px", cursor:"grab",
+                    borderRadius:"8px", padding:"10px 14px", cursor: isAdmin ? "grab" : "default",
                     display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px",
                     transition:"all 0.12s", boxSizing:"border-box",
                     boxShadow:isO?`0 0 0 2px ${act.border}44`:"none" }}>
@@ -425,20 +427,23 @@ export default function AgendaApp() {
                               padding:"3px 7px", cursor:"pointer", fontSize:"11px", fontFamily:"inherit" }}>✕</button>
                           </div>
                         ) : (
-                          <button onClick={()=>{setEditId(b.id);setEditVal(String(b.mins));}} style={{
-                            background:"none", border:"none", color:"#475569", fontSize:"10px",
-                            cursor:"pointer", padding:0, fontFamily:"inherit", marginTop:"2px", display:"block" }}>
-                            {fmtMins(b.mins)} ✎
-                          </button>
+                          <div style={{ display:"flex", gap:"5px", marginTop:"4px", alignItems:"center" }}>
+                            {isAdmin && <button onClick={()=>{setEditId(b.id);setEditVal(String(b.mins));}} style={{
+                              background:"none", border:"none", color:"#475569", fontSize:"10px",
+                              cursor:"pointer", padding:0, fontFamily:"inherit", marginTop:"2px", display:"block" }}>
+                              {fmtMins(b.mins)} ✎
+                            </button>}
+                            {!isAdmin && <span style={{ color:"#475569", fontSize:"10px", marginTop:"2px", display:"block" }}>{fmtMins(b.mins)}</span>}
+                          </div>
                         )}
                       </div>
                     </div>
                     <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
                       <span style={{ color:"#2d3f55", fontSize:"18px", cursor:"grab", userSelect:"none" }}>⠿</span>
-                      <button onClick={()=>remove(b.id)} style={{
+                      {isAdmin && <button onClick={()=>remove(b.id)} style={{
                         background:"transparent", border:"1px solid #334155", color:"#475569",
                         cursor:"pointer", fontSize:"11px", borderRadius:"4px",
-                        padding:"2px 7px", fontFamily:"inherit", lineHeight:1.2 }}>✕</button>
+                        padding:"2px 7px", fontFamily:"inherit", lineHeight:1.2 }}>✕</button>}
                     </div>
                   </div>
                 </div>
@@ -464,26 +469,33 @@ export default function AgendaApp() {
             const taskId = isCustom ? key.replace("custom_", "") : null;
             return (
               <div key={key} style={{ display:"flex", alignItems:"center", marginBottom:"4px" }}>
-                <button onClick={()=>addBlk(key)} style={{
-                  display:"flex", alignItems:"center", gap:"7px", flex:1,
-                  padding:"7px 9px",
-                  background:act.bg, border:`1px solid ${act.border}`,
-                  borderRadius:"7px", cursor:"pointer", color:act.color,
-                  fontSize:"10px", fontFamily:"inherit", fontWeight:"600",
-                  textAlign:"left", transition:"all 0.12s", lineHeight:"1.4" }}>
-                  <span style={{ flexShrink:0 }}>{act.emoji}</span>
-                  <span>{act.label}</span>
-                </button>
-                {isCustom && (
-                  <div style={{ display:"flex", gap:"2px", marginLeft:"4px" }}>
-                    <button onClick={(e) => { e.stopPropagation(); const numericId = Number(taskId); setEditingTask({ id: numericId, ...act }); setNewTask({ name: act.label, emoji: act.emoji, color: act.color, bg: act.bg || `${act.color}22`, border: act.border || act.color, mins: typeof act.mins === "number" ? act.mins : parseInt(act.mins) || 30 }); setShowModal(true); }} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#64748b", fontSize:"9px", cursor:"pointer" }}>✎</button>
-                    <button onClick={async (e) => { e.stopPropagation(); if(confirm("Eliminar tarea?")) { try { await apiDeleteTask(taskId, token); const newTasks = {...customTasks}; delete newTasks[key]; setCustomTasks(newTasks); } catch(e) { alert(e.message); } }}} style={{ padding:"4px 6px", background:"transparent", border:"1px solid #334155", borderRadius:"4px", color:"#f87171", fontSize:"9px", cursor:"pointer" }}>✕</button>
+                {isAdmin ? (
+                  <button onClick={()=>addBlk(key)} style={{
+                    display:"flex", alignItems:"center", gap:"7px", flex:1,
+                    padding:"7px 9px",
+                    background:act.bg, border:`1px solid ${act.border}`,
+                    borderRadius:"7px", cursor:"pointer", color:act.color,
+                    fontSize:"10px", fontFamily:"inherit", fontWeight:"600",
+                    textAlign:"left", transition:"all 0.12s", lineHeight:"1.4" }}>
+                    <span style={{ flexShrink:0 }}>{act.emoji}</span>
+                    <span>{act.label}</span>
+                  </button>
+                ) : (
+                  <div style={{
+                    display:"flex", alignItems:"center", gap:"7px", flex:1,
+                    padding:"7px 9px",
+                    background:act.bg, border:`1px solid ${act.border}`,
+                    borderRadius:"7px", cursor:"not-allowed", color:act.color,
+                    fontSize:"10px", fontFamily:"inherit", fontWeight:"600",
+                    textAlign:"left", transition:"all 0.12s", lineHeight:"1.4", opacity: 0.5 }}>
+                    <span style={{ flexShrink:0 }}>{act.emoji}</span>
+                    <span>{act.label}</span>
                   </div>
                 )}
               </div>
             );
           })}
-          <button onClick={()=>setShowModal(true)} style={{
+          {isAdmin && <button onClick={()=>setShowModal(true)} style={{
             display:"flex", alignItems:"center", gap:"7px", width:"100%",
             padding:"7px 9px", marginTop:"8px", marginBottom:"4px",
             background:"transparent", border:"1px dashed #475569",
@@ -492,7 +504,7 @@ export default function AgendaApp() {
             textAlign:"left", transition:"all 0.12s", lineHeight:"1.4" }}>
             <span style={{ flexShrink:0 }}>+</span>
             <span>Nueva Tarea</span>
-          </button>
+          </button>}
 
           {/* Resumen */}
           <div style={{ marginTop:"18px", paddingTop:"16px", borderTop:"1px solid #334155" }}>
