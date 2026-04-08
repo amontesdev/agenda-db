@@ -329,51 +329,6 @@ export default function AgendaApp() {
     
     setTouchState({ active: false, startIdx: null, currentIdx: null });
   };
-  const handleDragEnd = () => { setDragIdx(null); setOverIdx(null); };
-
-  // Touch handling para móvil
-  const [touchDrag, setTouchDrag] = useState(null);
-  const [touchY, setTouchY] = useState(null);
-
-  const handleTouchStart = (e, i) => {
-    if (!isAdmin) return;
-    const touch = e.touches[0];
-    setTouchDrag({ index: i, startY: touch.clientY, startX: touch.clientX });
-    setTouchY(touch.clientY);
-  };
-
-  const handleTouchMove = (e) => {
-    if (!touchDrag) return;
-    const touch = e.touches[0];
-    setTouchY(touch.clientY);
-    
-    // Calcular qué índice está siendo sobrevolado
-    const container = e.currentTarget;
-    const containerRect = container.getBoundingClientRect();
-    const relativeY = touch.clientY - containerRect.top;
-    
-    // Estimar índice basado en posición Y (aproximado)
-    const itemHeight = 60; // altura aproximada de cada item
-    const newOverIdx = Math.floor(relativeY / itemHeight);
-    if (newOverIdx >= 0 && newOverIdx < blocks.length && newOverIdx !== touchDrag.index) {
-      setOverIdx(newOverIdx);
-    }
-  };
-
-  const handleTouchEnd = (e) => {
-    if (!touchDrag) return;
-    
-    if (overIdx !== null && overIdx !== touchDrag.index) {
-      const nb = [...blocks];
-      const [item] = nb.splice(touchDrag.index, 1);
-      nb.splice(overIdx, 0, item);
-      setBlocks(nb);
-    }
-    
-    setTouchDrag(null);
-    setTouchY(null);
-    setOverIdx(null);
-  };
 
   /* ── CRUD bloques ── */
   const remove   = (id)   => setBlocks(blocks.filter(b => b.id !== id));
