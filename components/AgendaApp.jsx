@@ -265,7 +265,16 @@ export default function AgendaApp() {
   const handleDragEnd = () => { setDragIdx(null); setOverIdx(null); };
 
   // Touch & hold para reordenar en móvil
-  const [touchState, setTouchState] = useState({ active: false, startIdx: null, currentIdx: null, startY: 0 });
+  const [touchState, setTouchState] = useState({ 
+    active: false,        // Modo drag activo
+    started: false,       // Ya pasaron los 8px, drag iniciado
+    startIdx: null, 
+    currentIdx: null, 
+    startX: 0, 
+    startY: 0 
+  });
+
+  const TOUCH_THRESHOLD = 8; // pixels para iniciar drag
 
   const handleTouchStart = (e) => {
     if (!isAdmin) return;
@@ -282,8 +291,17 @@ export default function AgendaApp() {
       if (b === blockDiv) idx = i;
     });
     
+    // Guardar posición inicial
+    setTouchState({ 
+      active: true, 
+      started: false, 
+      startIdx: idx, 
+      currentIdx: idx, 
+      startX: touch.clientX, 
+      startY: touch.clientY 
+    });
+    
     e.preventDefault();
-    setTouchState({ active: true, startIdx: idx, currentIdx: idx, startY: touch.clientY });
   };
 
   const handleTouchMove = (e) => {
@@ -291,15 +309,24 @@ export default function AgendaApp() {
     
     const touch = e.touches[0];
     const container = e.currentTarget;
+    const dx = Math.abs(touch.clientX - touchState.startX);
+    const dy = Math.abs(touch.clientY - touchState.startY);
     
-    // Usar elementFromPoint para encontrar qué bloque está bajo el dedo
+    // Si no hemos pasado el threshold, no hacer nada
+    if (!touchState.started && dx < TOUCH_THRESHOLD && dy < TOUCH_THRESHOLD) {
+      return;
+    }
+    
+    // Pasamos el threshold - activar drag
+    if (!touchState.started) {
+      setTouchState(prev => ({ ...prev, started: true }));
+    }
+    
+    // Encontrar el bloque bajo el dedo
     const target = document.elementFromPoint(touch.clientX, touch.clientY);
     const blockDiv = target?.closest('[data-block]');
     
-    if (!blockDiv) {
-      e.preventDefault();
-      return;
-    }
+    if (!blockDiv) return;
     
     const blocks = container.querySelectorAll('[data-block]');
     let newIdx = touchState.startIdx;
@@ -312,15 +339,18 @@ export default function AgendaApp() {
       setTouchState(prev => ({ ...prev, currentIdx: newIdx }));
     }
     
-    e.preventDefault();
+    e.preventDefault(); // Bloquear scroll mientras drag
   };
 
   const handleTouchEnd = () => {
-    if (!touchState.active || touchState.startIdx === null) {
-      setTouchState({ active: false, startIdx: null, currentIdx: null, startY: 0 });
+    if (!touchState.active) return;
+    
+    // Si nunca se activó el drag (no pasó el threshold), solo resetear
+    if (!touchState.started) {
+      setTouchState({ active: false, started: false, startIdx: null, currentIdx: null, startX: 0, startY: 0 });
       return;
     }
-
+    
     const { startIdx, currentIdx } = touchState;
     
     if (startIdx !== currentIdx) {
@@ -330,7 +360,7 @@ export default function AgendaApp() {
       setBlocks(nb);
     }
     
-    setTouchState({ active: false, startIdx: null, currentIdx: null, startY: 0 });
+    setTouchState({ active: false, started: false, startIdx: null, currentIdx: null, startX: 0, startY: 0 });
   };
 
   /* ── CRUD bloques ── */
@@ -480,13 +510,13 @@ export default function AgendaApp() {
             {timed.map((b, i) => {
               const act = ACTIVITIES[b.type] || customTasks[b.type] || { emoji: "📌", label: b.type, color: "#94a3b8", bg: "#0a1020", border: "#334155" };
               const h   = Math.max(52, Math.min(b.mins * 0.75, 160));
-              const isD = dragIdx === i || (touchState.active && touchState.startIdx === i);
-              // Drop target: desktop drag o touch drag
+              const isD = dragIdx === i || (touchState.started && touchState.startIdx === i);
+              // Drop target: desktop drag o touch drag (solo cuando started)
               const isO = (dragIdx !== null && overIdx === i && dragIdx !== i) || 
-                          (touchState.active && touchState.currentIdx === i && touchState.startIdx !== i);
+                          (touchState.started && touchState.currentIdx === i && touchState.startIdx !== i);
               const isE = editId === b.id;
-              // Estado de touch para móvil
-              const isTouchDragging = touchState.active && touchState.currentIdx === i;
+              // Estado de touch para móvil (solo cuando started)
+              const isTouchDragging = touchState.started && touchState.currentIdx === i;
               return (
                 <div 
                   key={b.id} 
