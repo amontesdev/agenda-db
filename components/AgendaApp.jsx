@@ -133,8 +133,7 @@ export default function AgendaApp() {
   const [newTask, setNewTask] = useState({ name: "", emoji: "📌", color: "#94a3b8", bg: "#94a3b822", border: "#334155", mins: 30 });
   const [editId,   setEditId]   = useState(null);
   const [editVal,  setEditVal]  = useState("");
-  const [dragIdx,  setDragIdx]  = useState(null);
-  const [overIdx,  setOverIdx]  = useState(null);
+  
   const [dbStatus, setDbStatus] = useState("loading");
   const [savedAt,  setSavedAt]  = useState(null);
   const [loaded,   setLoaded]   = useState(false);
@@ -249,119 +248,9 @@ export default function AgendaApp() {
     loadFromDB(d, p);
   };
 
-/* ── Drag & Drop (desktop) ── */
-  const handleDragStart = (i)    => setDragIdx(i);
-  const handleDragOver  = (e, i) => { e.preventDefault(); setOverIdx(i); };
-  const handleDrop      = (e) => {
-    e.preventDefault();
-    if (dragIdx !== null && overIdx !== null && dragIdx !== overIdx) {
-      const nb = [...blocks];
-      const [item] = nb.splice(dragIdx, 1);
-      nb.splice(overIdx, 0, item);
-      setBlocks(nb);
-    }
-    setDragIdx(null); setOverIdx(null);
-  };
-  const handleDragEnd = () => { setDragIdx(null); setOverIdx(null); };
 
-  // Touch & hold para reordenar en móvil
-  const [touchState, setTouchState] = useState({ 
-    active: false,        // Modo drag activo
-    started: false,       // Ya pasaron los 8px, drag iniciado
-    startIdx: null, 
-    currentIdx: null, 
-    startX: 0, 
-    startY: 0 
-  });
 
-  const TOUCH_THRESHOLD = 8; // pixels para iniciar drag
-
-  const handleTouchStart = (e) => {
-    if (!isAdmin) return;
-    
-    const touch = e.touches[0];
-    const container = e.currentTarget;
-    const target = document.elementFromPoint(touch.clientX, touch.clientY);
-    const blockDiv = target?.closest('[data-block]');
-    if (!blockDiv) return;
-    
-    const blocks = container.querySelectorAll('[data-block]');
-    let idx = 0;
-    blocks.forEach((b, i) => {
-      if (b === blockDiv) idx = i;
-    });
-    
-    // Guardar posición inicial
-    setTouchState({ 
-      active: true, 
-      started: false, 
-      startIdx: idx, 
-      currentIdx: idx, 
-      startX: touch.clientX, 
-      startY: touch.clientY 
-    });
-    
-    e.preventDefault();
-  };
-
-  const handleTouchMove = (e) => {
-    if (!touchState.active || !isAdmin) return;
-    
-    const touch = e.touches[0];
-    const container = e.currentTarget;
-    const dx = Math.abs(touch.clientX - touchState.startX);
-    const dy = Math.abs(touch.clientY - touchState.startY);
-    
-    // Si no hemos pasado el threshold, no hacer nada
-    if (!touchState.started && dx < TOUCH_THRESHOLD && dy < TOUCH_THRESHOLD) {
-      return;
-    }
-    
-    // Pasamos el threshold - activar drag
-    if (!touchState.started) {
-      setTouchState(prev => ({ ...prev, started: true }));
-    }
-    
-    // Encontrar el bloque bajo el dedo
-    const target = document.elementFromPoint(touch.clientX, touch.clientY);
-    const blockDiv = target?.closest('[data-block]');
-    
-    if (!blockDiv) return;
-    
-    const blocks = container.querySelectorAll('[data-block]');
-    let newIdx = touchState.startIdx;
-    
-    blocks.forEach((b, i) => {
-      if (b === blockDiv) newIdx = i;
-    });
-    
-    if (newIdx !== touchState.currentIdx) {
-      setTouchState(prev => ({ ...prev, currentIdx: newIdx }));
-    }
-    
-    e.preventDefault(); // Bloquear scroll mientras drag
-  };
-
-  const handleTouchEnd = () => {
-    if (!touchState.active) return;
-    
-    // Si nunca se activó el drag (no pasó el threshold), solo resetear
-    if (!touchState.started) {
-      setTouchState({ active: false, started: false, startIdx: null, currentIdx: null, startX: 0, startY: 0 });
-      return;
-    }
-    
-    const { startIdx, currentIdx } = touchState;
-    
-    if (startIdx !== currentIdx) {
-      const nb = [...blocks];
-      const [item] = nb.splice(startIdx, 1);
-      nb.splice(currentIdx, 0, item);
-      setBlocks(nb);
-    }
-    
-    setTouchState({ active: false, started: false, startIdx: null, currentIdx: null, startX: 0, startY: 0 });
-  };
+  
 
   /* ── CRUD bloques ── */
   const remove   = (id)   => setBlocks(blocks.filter(b => b.id !== id));
@@ -499,9 +388,7 @@ export default function AgendaApp() {
         <div 
           data-timeline 
           style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+          
         >
           <div style={{ fontSize:"9px", color:"#1e3a5f", letterSpacing:"2px", marginBottom:"12px" }}>
             ↕ ARRASTRA · ✎ EDITAR · AUTO-GUARDADO EN SQLITE
@@ -510,24 +397,14 @@ export default function AgendaApp() {
             {timed.map((b, i) => {
               const act = ACTIVITIES[b.type] || customTasks[b.type] || { emoji: "📌", label: b.type, color: "#94a3b8", bg: "#0a1020", border: "#334155" };
               const h   = Math.max(52, Math.min(b.mins * 0.75, 160));
-              const isD = dragIdx === i || (touchState.started && touchState.startIdx === i);
-              // Drop target: desktop drag o touch drag (solo cuando started)
-              const isO = (dragIdx !== null && overIdx === i && dragIdx !== i) || 
-                          (touchState.started && touchState.currentIdx === i && touchState.startIdx !== i);
-              const isE = editId === b.id;
-              // Estado de touch para móvil (solo cuando started)
-              const isTouchDragging = touchState.started && touchState.currentIdx === i;
+              
               return (
                 <div 
                   key={b.id} 
                   data-block
-                  draggable={isAdmin}
-                  onDragStart={() => handleDragStart(i)}
-                  onDragOver={e => handleDragOver(e, i)}
-                  onDrop={handleDrop}
-                  onDragEnd={handleDragEnd}
+                  
                   style={{ display:"flex", alignItems:"stretch", marginBottom:"3px",
-                    opacity:isD||isTouchDragging?0.4:1, transition:"opacity 0.15s",
+                    transition:"opacity 0.15s",
                     userSelect:"none", WebkitUserSelect:"none" }}>
                   {/* Hora */}
                   <div style={{ width:"60px", flexShrink:0, display:"flex", flexDirection:"column",
@@ -576,12 +453,11 @@ export default function AgendaApp() {
                   )}
                   {/* Card */}
                   <div style={{ flex:1, minHeight:`${h}px`,
-                    background:isO?act.border+"22":act.bg,
-                    border:`1.5px solid ${isO?act.color:act.border}`,
+                    background:act.bg,
                     borderRadius:"8px", padding:"10px 14px", cursor: isAdmin ? "grab" : "default",
                     display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px",
                     transition:"all 0.12s", boxSizing:"border-box",
-                    boxShadow:isO?`0 0 0 2px ${act.border}44`:"none" }}>
+                    }}>
                     <div style={{ display:"flex", alignItems:"center", gap:"10px", flex:1, minWidth:0 }}>
                       <span style={{ fontSize:"18px", flexShrink:0 }}>{act.emoji}</span>
                       <div style={{ minWidth:0 }}>
