@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 /* ─── Datos ────────────────────────────────────────────────────────────── */
@@ -139,6 +139,22 @@ export default function AgendaApp() {
   const [savedAt,  setSavedAt]  = useState(null);
   const [loaded,   setLoaded]   = useState(false);
   const [sqlLog,   setSqlLog]   = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Hook para detectar si es móvil
+  const isMobile = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768;
+  }, []);
+
+  // Effect para manejar resize
+  const [isMobileView, setIsMobileView] = useState(false);
+  useEffect(() => {
+    const checkMobile = () => setIsMobileView(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const pushLog = useCallback((msg, type = "info") => {
     setSqlLog(l => [...l.slice(-11), { msg, type, ts: new Date().toLocaleTimeString("es-CO") }]);
@@ -233,10 +249,10 @@ export default function AgendaApp() {
     loadFromDB(d, p);
   };
 
-  /* ── Drag & Drop ── */
+/* ── Drag & Drop (desktop) ── */
   const handleDragStart = (i)    => setDragIdx(i);
   const handleDragOver  = (e, i) => { e.preventDefault(); setOverIdx(i); };
-  const handleDrop      = (e)    => {
+  const handleDrop      = (e) => {
     e.preventDefault();
     if (dragIdx !== null && overIdx !== null && dragIdx !== overIdx) {
       const nb = [...blocks];
@@ -247,6 +263,117 @@ export default function AgendaApp() {
     setDragIdx(null); setOverIdx(null);
   };
   const handleDragEnd = () => { setDragIdx(null); setOverIdx(null); };
+
+  // Touch & hold para reordenar en móvil
+  const [touchState, setTouchState] = useState({ active: false, startIdx: null, currentIdx: null });
+
+  const handleTouchStart = (e) => {
+    if (!isAdmin) return;
+    // Buscar el índice del elemento en el bloque
+    const blockDiv = e.currentTarget.closest('[data-block]');
+    if (!blockDiv) return;
+    
+    const blocks = e.currentTarget.closest('[data-timeline]')?.querySelectorAll('[data-block]');
+    if (!blocks) return;
+    
+    let idx = 0;
+    blocks.forEach((b, i) => {
+      if (b === blockDiv) idx = i;
+    });
+    
+    setTouchState({ active: true, startIdx: idx, currentIdx: idx });
+  };
+
+  const handleTouchMove = (e) => {
+    if (!touchState.active || !isAdmin) return;
+    
+    const touch = e.touches[0];
+    const container = e.currentTarget.closest('[data-timeline]');
+    if (!container) return;
+    
+    const rect = container.getBoundingClientRect();
+    const relativeY = touch.clientY - rect.top + container.scrollTop;
+    
+    // Calcular índice basado en posición Y
+    const items = container.querySelectorAll('[data-block]');
+    let newIdx = touchState.startIdx;
+    
+    items.forEach((item, i) => {
+      const itemRect = item.getBoundingClientRect();
+      const itemTop = itemRect.top - rect.top + container.scrollTop;
+      const itemMid = itemTop + itemRect.height / 2;
+      if (relativeY >= itemTop && relativeY < itemTop + itemRect.height) {
+        newIdx = i;
+      }
+    });
+    
+    if (newIdx !== touchState.currentIdx) {
+      setTouchState(prev => ({ ...prev, currentIdx: newIdx }));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchState.active || touchState.startIdx === null || touchState.currentIdx === null) {
+      setTouchState({ active: false, startIdx: null, currentIdx: null });
+      return;
+    }
+
+    const { startIdx, currentIdx } = touchState;
+    
+    if (startIdx !== currentIdx && startIdx !== null && currentIdx !== null) {
+      const nb = [...blocks];
+      const [item] = nb.splice(startIdx, 1);
+      nb.splice(currentIdx, 0, item);
+      setBlocks(nb);
+    }
+    
+    setTouchState({ active: false, startIdx: null, currentIdx: null });
+  };
+  const handleDragEnd = () => { setDragIdx(null); setOverIdx(null); };
+
+  // Touch handling para móvil
+  const [touchDrag, setTouchDrag] = useState(null);
+  const [touchY, setTouchY] = useState(null);
+
+  const handleTouchStart = (e, i) => {
+    if (!isAdmin) return;
+    const touch = e.touches[0];
+    setTouchDrag({ index: i, startY: touch.clientY, startX: touch.clientX });
+    setTouchY(touch.clientY);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!touchDrag) return;
+    const touch = e.touches[0];
+    setTouchY(touch.clientY);
+    
+    // Calcular qué índice está siendo sobrevolado
+    const container = e.currentTarget;
+    const containerRect = container.getBoundingClientRect();
+    const relativeY = touch.clientY - containerRect.top;
+    
+    // Estimar índice basado en posición Y (aproximado)
+    const itemHeight = 60; // altura aproximada de cada item
+    const newOverIdx = Math.floor(relativeY / itemHeight);
+    if (newOverIdx >= 0 && newOverIdx < blocks.length && newOverIdx !== touchDrag.index) {
+      setOverIdx(newOverIdx);
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!touchDrag) return;
+    
+    if (overIdx !== null && overIdx !== touchDrag.index) {
+      const nb = [...blocks];
+      const [item] = nb.splice(touchDrag.index, 1);
+      nb.splice(overIdx, 0, item);
+      setBlocks(nb);
+    }
+    
+    setTouchDrag(null);
+    setTouchY(null);
+    setOverIdx(null);
+  };
 
   /* ── CRUD bloques ── */
   const remove   = (id)   => setBlocks(blocks.filter(b => b.id !== id));
@@ -333,6 +460,18 @@ export default function AgendaApp() {
 
         {/* Controles */}
         <div style={{ display:"flex", gap:"5px", marginTop:"14px", flexWrap:"wrap", alignItems:"center" }}>
+          {/* Botón toggle sidebar en móvil */}
+          {isMobileView && (
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{
+              padding:"5px 10px", border:"1px solid #334155", cursor:"pointer",
+              background: sidebarOpen ? "#0f2340" : "transparent",
+              color: sidebarOpen ? "#93c5fd" : "#cbd5e1",
+              borderRadius:"6px", fontSize:"10px", fontFamily:"inherit",
+              fontWeight:"700", transition:"all 0.15s",
+            }}>
+              {sidebarOpen ? "☰ Ocultar" : "☰ Mostrar"}
+            </button>
+          )}
           {Object.keys(PRESETS).map(d => (
             <button key={d} onClick={() => switchTo(d, opt)} style={{
               padding:"5px 13px", border:"1px solid", cursor:"pointer",
@@ -369,7 +508,7 @@ export default function AgendaApp() {
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
 
         {/* Timeline */}
-        <div style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
+        <div data-timeline style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
           <div style={{ fontSize:"9px", color:"#1e3a5f", letterSpacing:"2px", marginBottom:"12px" }}>
             ↕ ARRASTRA · ✎ EDITAR · AUTO-GUARDADO EN SQLITE
           </div>
@@ -377,17 +516,28 @@ export default function AgendaApp() {
             {timed.map((b, i) => {
               const act = ACTIVITIES[b.type] || customTasks[b.type] || { emoji: "📌", label: b.type, color: "#94a3b8", bg: "#0a1020", border: "#334155" };
               const h   = Math.max(52, Math.min(b.mins * 0.75, 160));
-              const isD = dragIdx === i;
-              const isO = overIdx === i && dragIdx !== null && dragIdx !== i;
+              const isD = dragIdx === i || (touchState.active && touchState.startIdx === i);
+              // Drop target: desktop drag o touch drag
+              const isO = (dragIdx !== null && overIdx === i && dragIdx !== i) || 
+                          (touchState.active && touchState.currentIdx === i && touchState.startIdx !== i);
               const isE = editId === b.id;
+              // Estado de touch para móvil
+              const isTouchDragging = touchState.active && touchState.currentIdx === i;
               return (
-                <div key={b.id} draggable={isAdmin}
+                <div 
+                  key={b.id} 
+                  data-block
+                  draggable={isAdmin}
                   onDragStart={() => handleDragStart(i)}
                   onDragOver={e => handleDragOver(e, i)}
                   onDrop={handleDrop}
                   onDragEnd={handleDragEnd}
+                  // Touch events para móvil
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
                   style={{ display:"flex", alignItems:"stretch", marginBottom:"3px",
-                    opacity:isD?0.25:1, transition:"opacity 0.15s" }}>
+                    opacity:isD||isTouchDragging?0.4:1, transition:"opacity 0.15s" }}>
                   {/* Hora */}
                   <div style={{ width:"60px", flexShrink:0, display:"flex", flexDirection:"column",
                     justifyContent:"space-between", paddingRight:"10px", paddingBottom:"2px",
@@ -458,9 +608,19 @@ export default function AgendaApp() {
         </div>
 
         {/* ─ Panel derecho ─ */}
-        <div style={{ width:"200px", flexShrink:0, background:"#07101a",
-          borderLeft:"1px solid #334155", padding:"18px 13px", overflowY:"auto",
-          display:"flex", flexDirection:"column", gap:"0" }}>
+        <div style={{ 
+          width: isMobileView ? "200px" : "200px", 
+          flexShrink:0, 
+          background:"#07101a",
+          borderLeft:"1px solid #334155", 
+          padding:"18px 13px", 
+          overflowY:"auto",
+          display:"flex", 
+          flexDirection:"column", 
+          gap:"0",
+          // Ocultar en móvil cuando sidebarOpen es false
+          ...(isMobileView && !sidebarOpen ? { display: 'none' } : {})
+        }}>
 
           {/* Agregar */}
           <div style={{ fontSize:"9px", color:"#cbd5e1", letterSpacing:"2.5px", marginBottom:"11px" }}>+ AGREGAR</div>
