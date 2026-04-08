@@ -269,6 +269,8 @@ export default function AgendaApp() {
 
   const handleTouchStart = (e) => {
     if (!isAdmin) return;
+    e.preventDefault(); // Prevenir selección de texto
+    
     // Buscar el índice del elemento en el bloque
     const blockDiv = e.currentTarget.closest('[data-block]');
     if (!blockDiv) return;
@@ -286,6 +288,8 @@ export default function AgendaApp() {
 
   const handleTouchMove = (e) => {
     if (!touchState.active || !isAdmin) return;
+    
+    e.preventDefault(); // Prevenir selección de texto y scroll nativo
     
     const touch = e.touches[0];
     const container = e.currentTarget.closest('[data-timeline]');
@@ -492,7 +496,8 @@ export default function AgendaApp() {
                   onTouchMove={handleTouchMove}
                   onTouchEnd={handleTouchEnd}
                   style={{ display:"flex", alignItems:"stretch", marginBottom:"3px",
-                    opacity:isD||isTouchDragging?0.4:1, transition:"opacity 0.15s" }}>
+                    opacity:isD||isTouchDragging?0.4:1, transition:"opacity 0.15s",
+                    userSelect:"none", WebkitUserSelect:"none" }}>
                   {/* Hora */}
                   <div style={{ width:"60px", flexShrink:0, display:"flex", flexDirection:"column",
                     justifyContent:"space-between", paddingRight:"10px", paddingBottom:"2px",
