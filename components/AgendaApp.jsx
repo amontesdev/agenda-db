@@ -265,26 +265,25 @@ export default function AgendaApp() {
   const handleDragEnd = () => { setDragIdx(null); setOverIdx(null); };
 
   // Touch & hold para reordenar en móvil
-  const [touchState, setTouchState] = useState({ active: false, startIdx: null, currentIdx: null });
+  const [touchState, setTouchState] = useState({ active: false, startIdx: null, currentIdx: null, startY: 0 });
 
   const handleTouchStart = (e) => {
     if (!isAdmin) return;
     
-    // Buscar el índice del elemento en el bloque
-    const blockDiv = e.target.closest('[data-block]');
+    const touch = e.touches[0];
+    const container = e.currentTarget;
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    const blockDiv = target?.closest('[data-block]');
     if (!blockDiv) return;
     
-    const container = e.currentTarget;
     const blocks = container.querySelectorAll('[data-block]');
-    if (!blocks) return;
-    
     let idx = 0;
     blocks.forEach((b, i) => {
       if (b === blockDiv) idx = i;
     });
     
-    e.preventDefault(); // Prevenir selección de texto
-    setTouchState({ active: true, startIdx: idx, currentIdx: idx });
+    e.preventDefault();
+    setTouchState({ active: true, startIdx: idx, currentIdx: idx, startY: touch.clientY });
   };
 
   const handleTouchMove = (e) => {
@@ -292,44 +291,46 @@ export default function AgendaApp() {
     
     const touch = e.touches[0];
     const container = e.currentTarget;
-    const rect = container.getBoundingClientRect();
-    const relativeY = touch.clientY - rect.top + container.scrollTop;
     
-    // Calcular índice basado en posición Y
-    const items = container.querySelectorAll('[data-block]');
+    // Usar elementFromPoint para encontrar qué bloque está bajo el dedo
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    const blockDiv = target?.closest('[data-block]');
+    
+    if (!blockDiv) {
+      e.preventDefault();
+      return;
+    }
+    
+    const blocks = container.querySelectorAll('[data-block]');
     let newIdx = touchState.startIdx;
     
-    items.forEach((item, i) => {
-      const itemRect = item.getBoundingClientRect();
-      const itemTop = itemRect.top - rect.top + container.scrollTop;
-      if (relativeY >= itemTop && relativeY < itemTop + itemRect.height) {
-        newIdx = i;
-      }
+    blocks.forEach((b, i) => {
+      if (b === blockDiv) newIdx = i;
     });
     
     if (newIdx !== touchState.currentIdx) {
       setTouchState(prev => ({ ...prev, currentIdx: newIdx }));
     }
     
-    e.preventDefault(); // Prevenir selección de texto y scroll nativo
+    e.preventDefault();
   };
 
   const handleTouchEnd = () => {
-    if (!touchState.active || touchState.startIdx === null || touchState.currentIdx === null) {
-      setTouchState({ active: false, startIdx: null, currentIdx: null });
+    if (!touchState.active || touchState.startIdx === null) {
+      setTouchState({ active: false, startIdx: null, currentIdx: null, startY: 0 });
       return;
     }
 
     const { startIdx, currentIdx } = touchState;
     
-    if (startIdx !== currentIdx && startIdx !== null && currentIdx !== null) {
+    if (startIdx !== currentIdx) {
       const nb = [...blocks];
       const [item] = nb.splice(startIdx, 1);
       nb.splice(currentIdx, 0, item);
       setBlocks(nb);
     }
     
-    setTouchState({ active: false, startIdx: null, currentIdx: null });
+    setTouchState({ active: false, startIdx: null, currentIdx: null, startY: 0 });
   };
 
   /* ── CRUD bloques ── */
