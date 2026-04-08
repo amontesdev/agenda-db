@@ -269,13 +269,13 @@ export default function AgendaApp() {
 
   const handleTouchStart = (e) => {
     if (!isAdmin) return;
-    e.preventDefault(); // Prevenir selección de texto
     
     // Buscar el índice del elemento en el bloque
-    const blockDiv = e.currentTarget.closest('[data-block]');
+    const blockDiv = e.target.closest('[data-block]');
     if (!blockDiv) return;
     
-    const blocks = e.currentTarget.closest('[data-timeline]')?.querySelectorAll('[data-block]');
+    const container = e.currentTarget;
+    const blocks = container.querySelectorAll('[data-block]');
     if (!blocks) return;
     
     let idx = 0;
@@ -283,18 +283,15 @@ export default function AgendaApp() {
       if (b === blockDiv) idx = i;
     });
     
+    e.preventDefault(); // Prevenir selección de texto
     setTouchState({ active: true, startIdx: idx, currentIdx: idx });
   };
 
   const handleTouchMove = (e) => {
     if (!touchState.active || !isAdmin) return;
     
-    e.preventDefault(); // Prevenir selección de texto y scroll nativo
-    
     const touch = e.touches[0];
-    const container = e.currentTarget.closest('[data-timeline]');
-    if (!container) return;
-    
+    const container = e.currentTarget;
     const rect = container.getBoundingClientRect();
     const relativeY = touch.clientY - rect.top + container.scrollTop;
     
@@ -305,7 +302,6 @@ export default function AgendaApp() {
     items.forEach((item, i) => {
       const itemRect = item.getBoundingClientRect();
       const itemTop = itemRect.top - rect.top + container.scrollTop;
-      const itemMid = itemTop + itemRect.height / 2;
       if (relativeY >= itemTop && relativeY < itemTop + itemRect.height) {
         newIdx = i;
       }
@@ -314,6 +310,8 @@ export default function AgendaApp() {
     if (newIdx !== touchState.currentIdx) {
       setTouchState(prev => ({ ...prev, currentIdx: newIdx }));
     }
+    
+    e.preventDefault(); // Prevenir selección de texto y scroll nativo
   };
 
   const handleTouchEnd = () => {
@@ -467,7 +465,13 @@ export default function AgendaApp() {
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
 
         {/* Timeline */}
-        <div data-timeline style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}>
+        <div 
+          data-timeline 
+          style={{ flex:1, overflowY:"auto", padding:"20px 22px" }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
           <div style={{ fontSize:"9px", color:"#1e3a5f", letterSpacing:"2px", marginBottom:"12px" }}>
             ↕ ARRASTRA · ✎ EDITAR · AUTO-GUARDADO EN SQLITE
           </div>
@@ -491,10 +495,6 @@ export default function AgendaApp() {
                   onDragOver={e => handleDragOver(e, i)}
                   onDrop={handleDrop}
                   onDragEnd={handleDragEnd}
-                  // Touch events para móvil
-                  onTouchStart={handleTouchStart}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
                   style={{ display:"flex", alignItems:"stretch", marginBottom:"3px",
                     opacity:isD||isTouchDragging?0.4:1, transition:"opacity 0.15s",
                     userSelect:"none", WebkitUserSelect:"none" }}>
