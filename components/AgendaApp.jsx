@@ -594,9 +594,10 @@ export default function AgendaApp() {
                             }}
                             disabled={i === 0}
                             style={{
-                              background:"transparent", border:"none", color:"#475569",
+                              background:"transparent", border:"none", color:"#60a5fa",
                               cursor: i === 0 ? "not-allowed" : "pointer",
-                              fontSize:"12px", padding:"2px", opacity: i === 0 ? 0.3 : 1
+                              fontSize:"18px", padding:"2px 6px", opacity: i === 0 ? 0.3 : 1,
+                              lineHeight:1
                             }}
                           >↑</button>
                           <button 
@@ -610,14 +611,14 @@ export default function AgendaApp() {
                             }}
                             disabled={i === blocks.length - 1}
                             style={{
-                              background:"transparent", border:"none", color:"#475569",
+                              background:"transparent", border:"none", color:"#60a5fa",
                               cursor: i === blocks.length - 1 ? "not-allowed" : "pointer",
-                              fontSize:"12px", padding:"2px", opacity: i === blocks.length - 1 ? 0.3 : 1
+                              fontSize:"18px", padding:"2px 6px", opacity: i === blocks.length - 1 ? 0.3 : 1,
+                              lineHeight:1
                             }}
                           >↓</button>
                         </div>
                       )}
-                      <span style={{ color:"#2d3f55", fontSize:"18px", cursor:"grab", userSelect:"none" }}>⠿</span>
                       {isAdmin && <button onClick={()=>remove(b.id)} style={{
                         background:"transparent", border:"1px solid #334155", color:"#475569",
                         cursor:"pointer", fontSize:"11px", borderRadius:"4px",
