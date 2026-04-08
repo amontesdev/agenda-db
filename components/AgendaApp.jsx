@@ -579,7 +579,44 @@ export default function AgendaApp() {
                         )}
                       </div>
                     </div>
-                    <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:"8px", flexShrink:0 }}>
+                      {/* Botones mover arriba/abajo */}
+                      {isAdmin && (
+                        <div style={{ display:"flex", flexDirection:"column", gap:"2px" }}>
+                          <button 
+                            onClick={() => {
+                              if (i === 0) return;
+                              const nb = [...blocks];
+                              const temp = nb[i];
+                              nb[i] = nb[i-1];
+                              nb[i-1] = temp;
+                              setBlocks(nb);
+                            }}
+                            disabled={i === 0}
+                            style={{
+                              background:"transparent", border:"none", color:"#475569",
+                              cursor: i === 0 ? "not-allowed" : "pointer",
+                              fontSize:"12px", padding:"2px", opacity: i === 0 ? 0.3 : 1
+                            }}
+                          >↑</button>
+                          <button 
+                            onClick={() => {
+                              if (i === blocks.length - 1) return;
+                              const nb = [...blocks];
+                              const temp = nb[i];
+                              nb[i] = nb[i+1];
+                              nb[i+1] = temp;
+                              setBlocks(nb);
+                            }}
+                            disabled={i === blocks.length - 1}
+                            style={{
+                              background:"transparent", border:"none", color:"#475569",
+                              cursor: i === blocks.length - 1 ? "not-allowed" : "pointer",
+                              fontSize:"12px", padding:"2px", opacity: i === blocks.length - 1 ? 0.3 : 1
+                            }}
+                          >↓</button>
+                        </div>
+                      )}
                       <span style={{ color:"#2d3f55", fontSize:"18px", cursor:"grab", userSelect:"none" }}>⠿</span>
                       {isAdmin && <button onClick={()=>remove(b.id)} style={{
                         background:"transparent", border:"1px solid #334155", color:"#475569",
