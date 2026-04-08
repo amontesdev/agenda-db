@@ -535,6 +535,45 @@ export default function AgendaApp() {
                     fontSize:"10px", color:"#cbd5e1", userSelect:"none" }}>
                     <span>{b.start}</span><span>{b.end}</span>
                   </div>
+                  {/* Botones mover fuera del card */}
+                  {isAdmin && (
+                    <div style={{ display:"flex", flexDirection:"column", gap:"2px", marginRight:"6px" }}>
+                      <button 
+                        onClick={() => {
+                          if (i === 0) return;
+                          const nb = [...blocks];
+                          const temp = nb[i];
+                          nb[i] = nb[i-1];
+                          nb[i-1] = temp;
+                          setBlocks(nb);
+                        }}
+                        disabled={i === 0}
+                        style={{
+                          background:"transparent", border:"none", color:"#60a5fa",
+                          cursor: i === 0 ? "not-allowed" : "pointer",
+                          fontSize:"18px", padding:"2px 4px", opacity: i === 0 ? 0.3 : 1,
+                          lineHeight:1
+                        }}
+                      >↑</button>
+                      <button 
+                        onClick={() => {
+                          if (i === blocks.length - 1) return;
+                          const nb = [...blocks];
+                          const temp = nb[i];
+                          nb[i] = nb[i+1];
+                          nb[i+1] = temp;
+                          setBlocks(nb);
+                        }}
+                        disabled={i === blocks.length - 1}
+                        style={{
+                          background:"transparent", border:"none", color:"#60a5fa",
+                          cursor: i === blocks.length - 1 ? "not-allowed" : "pointer",
+                          fontSize:"18px", padding:"2px 4px", opacity: i === blocks.length - 1 ? 0.3 : 1,
+                          lineHeight:1
+                        }}
+                      >↓</button>
+                    </div>
+                  )}
                   {/* Card */}
                   <div style={{ flex:1, minHeight:`${h}px`,
                     background:isO?act.border+"22":act.bg,
@@ -579,51 +618,10 @@ export default function AgendaApp() {
                         )}
                       </div>
                     </div>
-                    <div style={{ display:"flex", alignItems:"center", gap:"8px", flexShrink:0 }}>
-                      {/* Botones mover arriba/abajo */}
-                      {isAdmin && (
-                        <div style={{ display:"flex", flexDirection:"column", gap:"2px" }}>
-                          <button 
-                            onClick={() => {
-                              if (i === 0) return;
-                              const nb = [...blocks];
-                              const temp = nb[i];
-                              nb[i] = nb[i-1];
-                              nb[i-1] = temp;
-                              setBlocks(nb);
-                            }}
-                            disabled={i === 0}
-                            style={{
-                              background:"transparent", border:"none", color:"#60a5fa",
-                              cursor: i === 0 ? "not-allowed" : "pointer",
-                              fontSize:"18px", padding:"2px 6px", opacity: i === 0 ? 0.3 : 1,
-                              lineHeight:1
-                            }}
-                          >↑</button>
-                          <button 
-                            onClick={() => {
-                              if (i === blocks.length - 1) return;
-                              const nb = [...blocks];
-                              const temp = nb[i];
-                              nb[i] = nb[i+1];
-                              nb[i+1] = temp;
-                              setBlocks(nb);
-                            }}
-                            disabled={i === blocks.length - 1}
-                            style={{
-                              background:"transparent", border:"none", color:"#60a5fa",
-                              cursor: i === blocks.length - 1 ? "not-allowed" : "pointer",
-                              fontSize:"18px", padding:"2px 6px", opacity: i === blocks.length - 1 ? 0.3 : 1,
-                              lineHeight:1
-                            }}
-                          >↓</button>
-                        </div>
-                      )}
-                      {isAdmin && <button onClick={()=>remove(b.id)} style={{
-                        background:"transparent", border:"1px solid #334155", color:"#475569",
-                        cursor:"pointer", fontSize:"11px", borderRadius:"4px",
-                        padding:"2px 7px", fontFamily:"inherit", lineHeight:1.2 }}>✕</button>}
-                    </div>
+                    {isAdmin && <button onClick={()=>remove(b.id)} style={{
+                      background:"transparent", border:"1px solid #334155", color:"#475569",
+                      cursor:"pointer", fontSize:"11px", borderRadius:"4px",
+                      padding:"2px 7px", fontFamily:"inherit", lineHeight:1.2 }}>✕</button>}
                   </div>
                 </div>
               );
