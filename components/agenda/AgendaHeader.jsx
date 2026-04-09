@@ -1,6 +1,6 @@
 "use client";
 
-import { PRESETS } from "@/lib/agendaConstants";
+import { DAY_LABELS as LABELS_DEFAULT, WEEKDAY_KEYS, WEEKEND_KEYS } from "@/lib/agendaConstants";
 import styles from "@/components/agenda/AgendaHeader.module.css";
 
 export default function AgendaHeader({
@@ -23,6 +23,18 @@ export default function AgendaHeader({
   onToggleSidebar,
   fmtMins,
 }) {
+  const labels = dayLabels || LABELS_DEFAULT;
+
+  const renderDayButton = (dayKey) => (
+    <button
+      key={dayKey}
+      onClick={() => onSelectDay(dayKey)}
+      className={`${styles.dayButton} ${day === dayKey ? styles.dayButtonActive : ""}`}
+    >
+      {labels[dayKey]}
+    </button>
+  );
+
   return (
     <div className={styles.header}>
       <div className={styles.headerTop}>
@@ -59,15 +71,18 @@ export default function AgendaHeader({
             {sidebarOpen ? "☰ Ocultar" : "☰ Mostrar"}
           </button>
         )}
-        {Object.keys(PRESETS).map((presetDay) => (
-          <button
-            key={presetDay}
-            onClick={() => onSelectDay(presetDay)}
-            className={`${styles.dayButton} ${day === presetDay ? styles.dayButtonActive : ""}`}
-          >
-            {dayLabels[presetDay]}
-          </button>
-        ))}
+        <div className={styles.dayGroup}>
+          <span className={styles.groupLabel}>Preset Semanal</span>
+          {renderDayButton("semana")}
+        </div>
+        <div className={styles.dayGroup}>
+          <span className={styles.groupLabel}>Días individuales</span>
+          {WEEKDAY_KEYS.map((weekday) => renderDayButton(weekday))}
+        </div>
+        <div className={styles.dayGroup}>
+          <span className={styles.groupLabel}>Fin de semana</span>
+          {WEEKEND_KEYS.map((weekend) => renderDayButton(weekend))}
+        </div>
         <span className={styles.divider} />
         {[1, 2, 3].map((value) => (
           <button
