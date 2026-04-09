@@ -1,0 +1,14 @@
+.app {
+  min-height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  display: flex;
+  flex-direction: column;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
