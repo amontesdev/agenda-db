@@ -25,6 +25,11 @@
   display: flex;
   align-items: center;
   margin-bottom: 4px;
+  gap: 6px;
+}
+
+.activityRowContent {
+  flex: 1;
 }
 
 .activityButton {
@@ -47,6 +52,21 @@
 .activityGhost {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.activityActions {
+  display: flex;
+  gap: 4px;
+}
+
+.iconButton {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-muted);
+  border-radius: 4px;
+  padding: 3px 5px;
+  font-size: 10px;
+  cursor: pointer;
 }
 
 .customButton {

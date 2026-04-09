@@ -71,6 +71,8 @@ export default function AgendaApp() {
           fmtMins={agenda.formatMinutes}
           onAddBlock={agenda.addBlock}
           onOpenModal={agenda.openNewTaskModal}
+          onEditTask={agenda.openEditTaskModal}
+          onDeleteTask={agenda.deleteTask}
           sqlLog={sqlLog}
           logColors={LOG_COLORS}
         />

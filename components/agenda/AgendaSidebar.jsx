@@ -12,6 +12,8 @@ export default function AgendaSidebar({
   fmtMins,
   onAddBlock,
   onOpenModal,
+  onEditTask,
+  onDeleteTask,
   sqlLog,
   logColors,
 }) {
@@ -21,6 +23,7 @@ export default function AgendaSidebar({
     <div className={sidebarClass}>
       <div className={styles.sectionTitle}>+ AGREGAR</div>
       {Object.entries(activities).map(([key, activity]) => {
+        const isCustom = key.startsWith("custom_");
         const content = (
           <>
             <span style={{ flexShrink: 0 }}>{activity.emoji}</span>
@@ -30,20 +33,28 @@ export default function AgendaSidebar({
 
         return (
           <div key={key} className={styles.activityRow}>
-            {isAdmin ? (
-              <button
-                className={styles.activityButton}
-                style={{ background: activity.bg, borderColor: activity.border, color: activity.color }}
-                onClick={() => onAddBlock(key)}
-              >
-                {content}
-              </button>
-            ) : (
-              <div
-                className={`${styles.activityButton} ${styles.activityGhost}`}
-                style={{ background: activity.bg, borderColor: activity.border, color: activity.color }}
-              >
-                {content}
+            <div className={styles.activityRowContent}>
+              {isAdmin ? (
+                <button
+                  className={styles.activityButton}
+                  style={{ background: activity.bg, borderColor: activity.border, color: activity.color }}
+                  onClick={() => onAddBlock(key)}
+                >
+                  {content}
+                </button>
+              ) : (
+                <div
+                  className={`${styles.activityButton} ${styles.activityGhost}`}
+                  style={{ background: activity.bg, borderColor: activity.border, color: activity.color }}
+                >
+                  {content}
+                </div>
+              )}
+            </div>
+            {isAdmin && isCustom && (
+              <div className={styles.activityActions}>
+                <button className={styles.iconButton} onClick={() => onEditTask(key)}>✎</button>
+                <button className={styles.iconButton} onClick={() => onDeleteTask(key)}>🗑</button>
               </div>
             )}
           </div>

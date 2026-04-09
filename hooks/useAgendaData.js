@@ -16,6 +16,7 @@ import {
 } from "@/lib/agendaConstants";
 import {
   apiCreateTask,
+  apiDeleteTask,
   apiLoad,
   apiLoadTasks,
   apiSave,
@@ -199,6 +200,27 @@ export function useAgendaData({ token, isAdmin, pushLog }) {
     setNewTask((prev) => ({ ...prev, ...changes }));
   }, []);
 
+  const deleteTask = useCallback(async (taskKey) => {
+    if (!isAdmin || !token) return;
+    const entry = customTasks[taskKey];
+    if (!entry) return;
+    const id = entry.id ?? Number(taskKey.replace("custom_", ""));
+    if (!Number.isFinite(id)) return;
+    const confirmed = typeof window === "undefined" ? true : window.confirm("¿Eliminar esta tarea personalizada?");
+    if (!confirmed) return;
+    try {
+      await apiDeleteTask(id, token);
+      setCustomTasks((prev) => {
+        const next = { ...prev };
+        delete next[taskKey];
+        return next;
+      });
+    } catch (error) {
+      console.error(error);
+      alert(`Error: ${error.message}`);
+    }
+  }, [customTasks, isAdmin, token]);
+
   const submitTask = useCallback(async () => {
     if (!token) return;
     if (!newTask.name.trim()) return;
@@ -223,6 +245,7 @@ export function useAgendaData({ token, isAdmin, pushLog }) {
             bg: payload.bg,
             border: payload.border,
             mins: payload.mins,
+            id: editingTask.id,
           },
         }));
       } else {
@@ -238,6 +261,7 @@ export function useAgendaData({ token, isAdmin, pushLog }) {
               bg: payload.bg,
               border: payload.border,
               mins: payload.mins,
+              id,
             },
           }));
         }
@@ -302,6 +326,7 @@ export function useAgendaData({ token, isAdmin, pushLog }) {
     openEditTaskModal,
     closeTaskModal,
     updateNewTask,
+    deleteTask,
     submitTask,
     fmtMins,
     formatMinutes: fmtMins,
