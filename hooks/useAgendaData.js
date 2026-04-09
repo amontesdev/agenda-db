@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ACTIVITIES,
   DAY_LABELS,
@@ -43,6 +43,11 @@ export function useAgendaData({ token, isAdmin, pushLog }) {
 
   const activityLookup = useMemo(() => ({ ...ACTIVITIES, ...customTasks }), [customTasks]);
   const log = pushLog || (() => {});
+  const selectionRef = useRef({ day, option });
+
+  useEffect(() => {
+    selectionRef.current = { day, option };
+  }, [day, option]);
 
   const loadFromDB = useCallback(async (targetDay, targetOption) => {
     if (!token) return;
@@ -50,6 +55,10 @@ export function useAgendaData({ token, isAdmin, pushLog }) {
     log(`SELECT * FROM schedules WHERE day='${targetDay}' AND option=${targetOption}`, "query");
     try {
       const data = await apiLoad(targetDay, targetOption, token);
+      const { day: currentDay, option: currentOption } = selectionRef.current;
+      if (currentDay !== targetDay || currentOption !== targetOption) {
+        return;
+      }
       if (data?.found) {
         setBlocks(seed(data.blocks));
         setStartTime(data.startTime || DAY_STARTS[targetDay]);
