@@ -224,11 +224,12 @@ export function useAgendaData({ token, isAdmin, pushLog }) {
         delete next[taskKey];
         return next;
       });
+      setBlocks((prev) => prev.filter((block) => block.type !== taskKey));
     } catch (error) {
       console.error(error);
       alert(`Error: ${error.message}`);
     }
-  }, [customTasks, isAdmin, token]);
+  }, [customTasks, isAdmin, setBlocks, token]);
 
   const submitTask = useCallback(async () => {
     if (!token) return;

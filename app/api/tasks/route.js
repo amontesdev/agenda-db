@@ -99,7 +99,7 @@ export async function DELETE(req) {
 
     const numericId = Number(id);
 
-    if (!id || !Number.isFinite(numericId)) {
+  if (!id || !Number.isFinite(numericId)) {
       return NextResponse.json({ error: "Se requiere id" }, { status: 400 });
     }
 
@@ -108,7 +108,37 @@ export async function DELETE(req) {
       args: [numericId, user.uid],
     });
 
-    return NextResponse.json({ ok: true });
+    const scheduleResult = await db.execute({
+      sql: "SELECT id, blocks FROM schedules WHERE user_id = ?",
+      args: [user.uid],
+    });
+
+    const targetType = `custom_${numericId}`;
+    let cleaned = 0;
+
+    for (const row of scheduleResult?.rows ?? []) {
+      const rowIdRaw = row?.id;
+      const rowId = typeof rowIdRaw === "bigint" ? Number(rowIdRaw) : rowIdRaw;
+      if (!rowId) continue;
+      let blocks = [];
+      try {
+        blocks = Array.isArray(row?.blocks)
+          ? row.blocks
+          : JSON.parse(row?.blocks || "[]");
+      } catch (error) {
+        continue;
+      }
+      if (!Array.isArray(blocks) || blocks.length === 0) continue;
+      const filtered = blocks.filter((block) => block?.type !== targetType);
+      if (filtered.length === blocks.length) continue;
+      cleaned += 1;
+      await db.execute({
+        sql: "UPDATE schedules SET blocks = ?, updated_at = datetime('now') WHERE id = ?",
+        args: [JSON.stringify(filtered), rowId],
+      });
+    }
+
+    return NextResponse.json({ ok: true, cleaned });
 
   } catch (err) {
     console.error("[DELETE /api/tasks]", err);
